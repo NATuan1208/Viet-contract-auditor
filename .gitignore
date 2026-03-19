@@ -24,3 +24,7 @@ Thumbs.db
 
 # HuggingFace cache
 ~/.cache/huggingface/
+
+# Agent support docs
+CLAUDE.md
+Project_base_knowledge.md
