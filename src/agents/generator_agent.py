@@ -35,6 +35,7 @@ def _template_report(state: AuditState) -> str:
     domain = state.get("contract_domain", "Chưa xác định")
     confidence = state.get("confidence_score", 0.0)
     chunks = state.get("chunks", [])
+    negations = state.get("negations_found", [])
     error = state.get("error")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -80,7 +81,24 @@ def _template_report(state: AuditState) -> str:
                 "",
             ]
 
+    # --- Negations section (always present) ---
     lines += [
+        "## Điều khoản phủ định & ngoại lệ",
+        "",
+    ]
+    if negations:
+        lines.append(
+            "Critic Agent phát hiện các biểu thức phủ định/ngoại lệ trong ngữ cảnh pháp lý "
+            "— cần kiểm tra xem hợp đồng có bao gồm đầy đủ các ngoại lệ bắt buộc không:"
+        )
+        lines.append("")
+        for neg in negations:
+            lines.append(f"- `{neg}`")
+    else:
+        lines.append("Không phát hiện điều khoản phủ định hay ngoại lệ pháp lý.")
+
+    lines += [
+        "",
         "## Khuyến nghị chung",
         "",
         "_(Xem chi tiết từng vi phạm ở trên. "
@@ -101,6 +119,13 @@ async def generator_node(state: AuditState) -> dict:
     domain = state.get("contract_domain", "")
     error = state.get("error")
 
+    negations = state.get("negations_found", [])
+    negations_str = (
+        "\n".join(f"- `{n}`" for n in negations)
+        if negations
+        else "Không phát hiện điều khoản phủ định hay ngoại lệ pháp lý."
+    )
+
     if confidence >= 0.3 and findings and not error:
         try:
             response = await _cerebras.chat.completions.create(
@@ -109,6 +134,7 @@ async def generator_node(state: AuditState) -> dict:
                     "role": "user",
                     "content": GENERATOR_SYSTEM_PROMPT.format(
                         domain=domain,
+                        negations=negations_str,
                         findings_json=json.dumps(findings, ensure_ascii=False, indent=2),
                     ),
                 }],
