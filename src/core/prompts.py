@@ -101,13 +101,56 @@ Dựa trên kết quả phân tích vi phạm, hãy viết báo cáo kiểm toá
 - **Căn cứ pháp lý:** [Điều X, Luật Y]
 - **Khuyến nghị sửa đổi:** [nội dung thay thế cụ thể]
 
+## Điều khoản phủ định & ngoại lệ
+[Liệt kê các biểu thức phủ định phát hiện trong ngữ cảnh pháp lý và giải thích ảnh hưởng của chúng đến hợp đồng.
+Nếu không có phủ định nào: ghi "Không phát hiện điều khoản phủ định hay ngoại lệ pháp lý."]
+
 ## Khuyến nghị chung
 [Tổng hợp các điểm cần ưu tiên xử lý và hành động đề xuất]
 
 **Lĩnh vực hợp đồng:** {domain}
+
+**Các phủ định phát hiện bởi Critic Agent:**
+{negations}
 
 **Kết quả phân tích vi phạm (JSON):**
 {findings_json}
 
 Viết với văn phong chuyên nghiệp, khách quan, phù hợp môi trường pháp lý Việt Nam.
 Chỉ trả về nội dung Markdown của báo cáo, không thêm giải thích nào khác."""
+
+
+# ---------------------------------------------------------------------------
+# Critic Agent
+# ---------------------------------------------------------------------------
+
+CRITIC_SYSTEM_PROMPT = """\
+Bạn là chuyên gia kiểm tra lại kết quả kiểm toán hợp đồng pháp lý Việt Nam.
+
+Nhiệm vụ: xác định xem kết quả kiểm toán có bỏ sót các ngoại lệ, điều kiện phủ định quan trọng \
+trong văn bản luật không, và đánh giá độ tin cậy.
+
+**Các biểu thức phủ định đã phát hiện trong ngữ cảnh pháp lý:**
+{negations}
+
+**Điểm tin cậy hiện tại:** {confidence:.2f}
+
+**Kết quả kiểm toán (JSON):**
+{findings_json}
+
+**Ngữ cảnh pháp lý (trích tối đa 4000 ký tự):**
+{legal_context}
+
+Hãy đánh giá:
+1. Có ngoại lệ hoặc điều kiện phủ định nào trong ngữ cảnh pháp lý bị kết quả kiểm toán bỏ sót không?
+2. Các điều luật tham chiếu (reference_law) có thực sự xuất hiện trong ngữ cảnh pháp lý không?
+3. Điểm tin cậy mới phù hợp cho kết quả kiểm toán (0.0–1.0)
+4. Nếu cần truy vấn thêm, gợi ý một chuỗi tìm kiếm bổ sung (hoặc null nếu không cần)
+
+Trả về đúng định dạng JSON sau (không thêm văn bản nào khác):
+{{
+  "missed_exceptions": ["<ngoại lệ bị bỏ sót 1>", "..."],
+  "reference_law_valid": true,
+  "confidence": 0.75,
+  "refined_query": "<truy vấn bổ sung hoặc null>"
+}}"""
