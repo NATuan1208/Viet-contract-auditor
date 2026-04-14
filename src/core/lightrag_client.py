@@ -14,6 +14,7 @@ import logging
 import os
 
 import numpy as np
+from openai import RateLimitError
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ _EMBED_DIM = 384
 
 _rag_instance = None
 _rag_lock: asyncio.Lock | None = None
+_llm_call_count: int = 0  # incremented on every _cerebras_llm invocation
 
 
 def _get_lock() -> asyncio.Lock:
@@ -44,20 +46,32 @@ async def _cerebras_llm(
     """LightRAG-compatible llm_model_func backed by Cerebras via openai_complete_if_cache.
 
     Inherits tenacity retry logic (RateLimitError, APIConnectionError, APITimeoutError).
+    Logs every invocation as INFO so rate-limit debugging is possible without --verbose.
     """
+    global _llm_call_count
+    _llm_call_count += 1
+    n = _llm_call_count
+    logger.warning("lightrag_llm: call #%d for %.60s...", n, prompt)
+
     from lightrag.llm.openai import openai_complete_if_cache
 
-    return await openai_complete_if_cache(
-        _MODEL,
-        prompt,
-        system_prompt=system_prompt,
-        history_messages=history_messages or [],
-        enable_cot=enable_cot,
-        keyword_extraction=keyword_extraction,
-        base_url="https://api.cerebras.ai/v1",
-        api_key=os.getenv("CEREBRAS_API_KEY"),
-        **kwargs,
-    )
+    try:
+        return await openai_complete_if_cache(
+            _MODEL,
+            prompt,
+            system_prompt=system_prompt,
+            history_messages=history_messages or [],
+            enable_cot=enable_cot,
+            keyword_extraction=keyword_extraction,
+            base_url="https://api.cerebras.ai/v1",
+            api_key=os.getenv("CEREBRAS_API_KEY"),
+            **kwargs,
+        )
+    except RateLimitError:
+        logger.warning(
+            "lightrag_llm: rate limited on call #%d, openai_complete_if_cache will retry", n
+        )
+        raise
 
 
 async def get_rag_client():
