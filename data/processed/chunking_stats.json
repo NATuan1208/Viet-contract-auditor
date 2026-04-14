@@ -1,0 +1,49 @@
+{
+  "total_laws": 3,
+  "total_chunks": 256,
+  "total_tokens_estimated": 239871,
+  "min_tokens": 136,
+  "max_tokens": 1439,
+  "avg_tokens": 936,
+  "chunks_in_target_range": 205,
+  "pct_in_range": 80.1,
+  "chunks_with_overlap": 253,
+  "per_law": [
+    {
+      "law_id": "91/2015/qh13",
+      "name": "Bộ luật Dân sự 2015",
+      "source": "huggingface",
+      "chunks": 118,
+      "total_tokens": 114876,
+      "min_tokens": 852,
+      "max_tokens": 1249,
+      "avg_tokens": 973,
+      "pct_in_range": 99.2,
+      "chunks_with_overlap": 117
+    },
+    {
+      "law_id": "59/2020/qh14",
+      "name": "Luật Doanh nghiệp 2020",
+      "source": "huggingface",
+      "chunks": 115,
+      "total_tokens": 102583,
+      "min_tokens": 136,
+      "max_tokens": 1439,
+      "avg_tokens": 892,
+      "pct_in_range": 60.0,
+      "chunks_with_overlap": 114
+    },
+    {
+      "law_id": "54/2010/qh12",
+      "name": "Luật Trọng tài Thương mại 2010",
+      "source": "huggingface",
+      "chunks": 23,
+      "total_tokens": 22412,
+      "min_tokens": 461,
+      "max_tokens": 1210,
+      "avg_tokens": 974,
+      "pct_in_range": 82.6,
+      "chunks_with_overlap": 22
+    }
+  ]
+}

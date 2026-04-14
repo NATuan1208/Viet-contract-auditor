@@ -10,9 +10,8 @@ build/
 .venv/
 venv/
 
-# Data (quá lớn cho git)
-data/raw/
-data/processed/*.json
+# Report outputs (test artifacts, never commit)
+report*.md
 
 # IDE
 .vscode/
