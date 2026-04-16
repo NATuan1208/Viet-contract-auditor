@@ -1,11 +1,11 @@
 """Generator Agent — formats audit findings into a Vietnamese Markdown report.
 
-Inputs:  AuditState.audit_findings, AuditState.contract_domain, AuditState.confidence_score
+Inputs:  AuditState.audit_findings, AuditState.contract_domain, AuditState.confidence
 Outputs: AuditState.final_report
 
 Two paths:
-  - confidence_score >= 0.3: Cerebras qwen-3-235b call with GENERATOR_SYSTEM_PROMPT
-  - confidence_score < 0.3: pure template formatter (no LLM call)
+    - confidence >= 0.3: Cerebras qwen-3-235b call with GENERATOR_SYSTEM_PROMPT
+    - confidence < 0.3: pure template formatter (no LLM call)
 """
 
 from __future__ import annotations
@@ -33,7 +33,10 @@ def _template_report(state: AuditState) -> str:
     """Build a Markdown audit report purely from template (no LLM call)."""
     findings = state.get("audit_findings", [])
     domain = state.get("contract_domain", "Chưa xác định")
-    confidence = state.get("confidence_score", 0.0)
+    confidence = state.get("confidence", 0.0)
+    error_type = state.get("error_type", "low_confidence")
+    context_quality = state.get("context_quality", 0.0)
+    retry_count = state.get("retry_count", 0)
     chunks = state.get("chunks", [])
     negations = state.get("negations_found", [])
     error = state.get("error")
@@ -106,7 +109,9 @@ def _template_report(state: AuditState) -> str:
         "",
         "---",
         f"*Lĩnh vực: **{domain}** | Điểm tin cậy: {confidence:.2f} | "
-        f"Điều khoản: {len(chunks)} | Vi phạm: {len(findings)} | {now}*",
+        f"Chất lượng ngữ cảnh: {context_quality:.2f} | Loại lỗi: {error_type} | "
+        f"Số lần critic: {retry_count} | Điều khoản: {len(chunks)} | "
+        f"Vi phạm: {len(findings)} | {now}*",
     ]
 
     return "\n".join(lines)
@@ -114,7 +119,7 @@ def _template_report(state: AuditState) -> str:
 
 async def generator_node(state: AuditState) -> dict:
     """LangGraph node: format audit findings into a Vietnamese Markdown report."""
-    confidence = state.get("confidence_score", 0.0)
+    confidence = state.get("confidence", 0.0)
     findings = state.get("audit_findings", [])
     domain = state.get("contract_domain", "")
     error = state.get("error")

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-04-06T15:36:09.709600",
+  "timestamp": "2026-04-16T21:55:59.113266",
   "postgresql": {
     "host": "127.0.0.1",
     "port": 55432,
@@ -7,16 +7,16 @@
     "workspace": "viet_contract_prod",
     "table_count": 8,
     "tables": {
-      "lightrag_doc_chunks": 389,
-      "lightrag_doc_full": 406,
-      "lightrag_doc_status": 531,
+      "lightrag_doc_chunks": 258,
+      "lightrag_doc_full": 256,
+      "lightrag_doc_status": 256,
       "lightrag_entity_chunks": 2138,
       "lightrag_full_entities": 222,
       "lightrag_full_relations": 222,
       "lightrag_llm_cache": 0,
       "lightrag_relation_chunks": 2686
     },
-    "total_records": 6594,
+    "total_records": 6038,
     "status": "healthy"
   },
   "neo4j": {
@@ -30,26 +30,17 @@
     "url": "http://localhost:6333",
     "workspace": "viet_contract_prod",
     "collections": {
-      "lightrag_vdb_entities_offline_import_embedding_384d": {
+      "lightrag_vdb_entities_paraphrase_multilingual_minilm_l12_v2_384d": {
         "points": 2138
       },
-      "lightrag_vdb_chunks_offline_import_embedding_384d": {
-        "points": 258
-      },
-      "lightrag_vdb_relationships_offline_import_embedding_384d": {
+      "lightrag_vdb_relationships_paraphrase_multilingual_minilm_l12_v2_384d": {
         "points": 2754
       },
-      "lightrag_vdb_relationships_text_embedding_3_small_1536d": {
-        "points": 0
-      },
-      "lightrag_vdb_entities_text_embedding_3_small_1536d": {
-        "points": 0
-      },
-      "lightrag_vdb_chunks_text_embedding_3_small_1536d": {
-        "points": 0
+      "lightrag_vdb_chunks_paraphrase_multilingual_minilm_l12_v2_384d": {
+        "points": 258
       }
     },
-    "total_collections": 6,
+    "total_collections": 3,
     "total_points": 5150,
     "status": "healthy"
   },

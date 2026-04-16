@@ -1,13 +1,13 @@
 """Audit Agent — cross-checks contract clauses against legal context.
 
 Inputs:  AuditState.chunks, AuditState.legal_context
-Outputs: AuditState.audit_findings, AuditState.confidence_score
+Outputs: AuditState.audit_findings, AuditState.confidence
 
 Calls Cerebras qwen-3-235b for each clause (sequential, semaphore(1)).
 Each clause receives its own legal_context section (matched by index, capped at 3000 chars).
 Exponential backoff retry on 429 / timeout (2s → 4s → 8s, max 3 retries).
 1.5s sleep between clause completions to respect Cerebras TPM.
-confidence_score = fraction of findings with a non-empty reference_law.
+confidence = fraction of findings with a non-empty reference_law.
 >50% clause failures → pipeline error.
 """
 
@@ -121,7 +121,7 @@ async def audit_node(state: AuditState) -> dict:
 
     if not chunks:
         logger.warning("audit_agent: no chunks to audit")
-        return {"audit_findings": [], "confidence_score": 0.0}
+        return {"audit_findings": [], "confidence": 0.0}
 
     legal_context = state.get("legal_context", "")
     clause_contexts = _split_legal_context_by_section(legal_context, len(chunks))
@@ -149,17 +149,18 @@ async def audit_node(state: AuditState) -> dict:
     if failed > len(chunks) // 2:
         return {
             "audit_findings": all_findings,
-            "confidence_score": 0.0,
+            "confidence": 0.0,
             "error": f"audit_agent: {failed}/{len(chunks)} clauses failed",
         }
 
     scored = sum(1 for f in all_findings if f.get("reference_law"))
-    confidence_score = scored / len(all_findings) if all_findings else 0.0
+    confidence = scored / len(all_findings) if all_findings else 0.0
+    confidence = max(0.0, min(1.0, confidence))
 
     logger.info(
         "audit_agent: %d finding(s), %d failed clause(s), confidence=%.2f",
         len(all_findings),
         failed,
-        confidence_score,
+        confidence,
     )
-    return {"audit_findings": all_findings, "confidence_score": confidence_score}
+    return {"audit_findings": all_findings, "confidence": confidence}

@@ -1,0 +1,32 @@
+{
+  "contract_metadata": {
+    "type": "Hợp đồng nhượng quyền thương mại",
+    "source_file": "hop-dong-nhuong-quyen-thuong-mai_1010092534.docx"
+  },
+  "perturbed_contract_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\n\nĐộc lập – Tự do – Hạnh phúc\n\n\nHỢP ĐỒNG NHƯỢNG QUYỀN THƯƠNG MẠI\n\n- Căn cứ Luật thương mại năm 2005;\n\n- Căn cứ Nghị định số 35/2006/NĐ-CP Quy định chi tiết Luật thương mại về hoạt động nhượng quyền thương mại\n\n- Căn cứ vào nhu cầu và khả năng giữa các bên;\n\nHôm nay ngày..... tháng .... năm ……..., tại………………………………, chúng tôi gồm:\n\nBÊN NHƯỢNG QUYỀN: …………………………………… ...........................................\n\n(Sau đây gọi tắt là Bên A)\n\n...\n\nXét thấy:\n\nBên A là một pháp nhân được thành lập và hoạt động hợp pháp theo quy định pháp luật Việt Nam. Bên A là đơn vị đã thiết lập, vận hành, phát triển hệ thống ................................ mang thương hiệu ................................ (sau đây gọi là “Hệ thống”) trên lãnh thổ Việt Nam.\n\nBên B là một pháp nhân được thành lập và hoạt động hợp pháp theo quy định pháp luật Việt Nam (cá nhân) có nhu cầu kinh doanh ................................ mang thương hiệu ................................ mà Bên A đang kinh doanh.\n\nDo đó, hai bên thỏa thuận ký kết hợp đồng nhượng quyền thương mại với nội dung chi tiết của bản hợp đồng như sau:\n\nĐIỀU 1: NỘI DUNG NHƯỢNG QUYỀN THƯƠNG MẠI\n...\n\nĐIỀU 4: QUYỀN VÀ NGHĨA VỤ CỦA B\n\n4.1. Bên B có những quyền sau đây:\n...\n\n4.2. Bên B có các nghĩa vụ như sau:\n...\n\n4.2.14. Bên B cam kết không được khiếu nại, khiếu kiện hoặc phản ánh dưới bất kỳ hình thức nào liên quan đến chất lượng máy móc, thiết bị, nguyên vật liệu hoặc bất kỳ tài sản nào do Bên A cung cấp trong suốt thời gian thực hiện Hợp đồng.\n\nĐIỀU 6: GIÁ CẢ, PHÍ NHƯỢNG QUYỀN ĐỊNH KỲ VÀ PHƯƠNG THỨC THANH TOÁN\n\n6.1. Phí nhượng quyền bao gồm 02 khoản: phí nhượng quyền ban đầu và phí nhượng quyền hàng tháng.\n\n6.1.2. Phí nhượng quyền hàng tháng được tính bằng: 5% tổng doanh thu tháng liền kề trước đó của Cửa hàng của Bên B trong năm đầu tiên. Kể từ năm thứ hai trở đi, mức phí này sẽ tự động tăng 20% mỗi năm mà không cần sự thỏa thuận lại của các bên.\n\n...\n\n(Phần còn lại giữ nguyên như hợp đồng gốc)\n",
+  "vulnerabilities": [
+    {
+      "type": "Omission",
+      "location": "Phần xét thấy / Điều 1",
+      "description": "Không nêu rõ hệ thống nhượng quyền đã hoạt động ít nhất 01 năm trước khi nhượng quyền.",
+      "reasoning": "Theo Nghị định 35/2006/NĐ-CP, điều kiện để nhượng quyền là hệ thống phải hoạt động ít nhất 1 năm.",
+      "legal_risk": "Hợp đồng có thể bị vô hiệu hoặc bị cơ quan quản lý xử phạt do không đủ điều kiện nhượng quyền."
+    },
+    {
+      "type": "Logical",
+      "location": "Điều 4.2.14",
+      "description": "Cấm bên nhận quyền khiếu nại về chất lượng thiết bị do bên nhượng cung cấp.",
+      "reasoning": "Điều khoản này tước bỏ quyền hợp pháp của bên nhận quyền trong việc bảo vệ quyền lợi khi hàng hóa, thiết bị không đảm bảo chất lượng.",
+      "legal_risk": "Điều khoản có thể bị vô hiệu; phát sinh tranh chấp và trách nhiệm bồi thường từ bên nhượng quyền."
+    },
+    {
+      "type": "Numeric",
+      "location": "Điều 6.1.2",
+      "description": "Phí nhượng quyền định kỳ tự động tăng 20% mỗi năm mà không cần thỏa thuận.",
+      "reasoning": "Việc tăng phí đơn phương, không có cơ chế thỏa thuận lại vi phạm nguyên tắc tự do thỏa thuận và cân bằng lợi ích giữa các bên.",
+      "legal_risk": "Dễ bị tranh chấp, điều khoản có thể bị tuyên vô hiệu một phần do bất bình đẳng nghiêm trọng."
+    }
+  ],
+  "reasoning": "Các bẫy được cài bằng cách: (1) loại bỏ điều kiện pháp lý bắt buộc về thời gian hoạt động của hệ thống, (2) thêm điều khoản tước quyền khiếu nại của bên nhận quyền, và (3) áp đặt cơ chế tăng phí tự động bất lợi cho bên nhận quyền.",
+  "severity": "High"
+}

@@ -144,13 +144,23 @@ trong văn bản luật không, và đánh giá độ tin cậy.
 Hãy đánh giá:
 1. Có ngoại lệ hoặc điều kiện phủ định nào trong ngữ cảnh pháp lý bị kết quả kiểm toán bỏ sót không?
 2. Các điều luật tham chiếu (reference_law) có thực sự xuất hiện trong ngữ cảnh pháp lý không?
-3. Điểm tin cậy mới phù hợp cho kết quả kiểm toán (0.0–1.0)
-4. Nếu cần truy vấn thêm, gợi ý một chuỗi tìm kiếm bổ sung (hoặc null nếu không cần)
+3. Phân loại lỗi chính xác vào đúng một nhãn:
+   - hallucination: tham chiếu luật sai hoặc không có trong ngữ cảnh
+   - reasoning: suy luận sai nhưng ngữ cảnh có vẻ đủ
+   - low_confidence: chưa đủ chắc chắn để kết luận, cần truy vấn bổ sung
+   - ok: kết quả đáng tin cậy, không cần lặp lại
+4. Điểm tin cậy mới phù hợp cho kết quả kiểm toán (0.0–1.0)
+5. Ước lượng chất lượng ngữ cảnh pháp lý hiện tại (0.0–1.0)
+6. Nếu cần truy vấn thêm, gợi ý một chuỗi tìm kiếm bổ sung (hoặc null nếu không cần)
+7. Giải thích ngắn gọn lý do ra quyết định route
 
 Trả về đúng định dạng JSON sau (không thêm văn bản nào khác):
 {{
+  "error_type": "hallucination|reasoning|low_confidence|ok",
   "missed_exceptions": ["<ngoại lệ bị bỏ sót 1>", "..."],
   "reference_law_valid": true,
   "confidence": 0.75,
-  "refined_query": "<truy vấn bổ sung hoặc null>"
+  "context_quality": 0.80,
+  "refined_query": "<truy vấn bổ sung hoặc null>",
+  "reason": "<lý do ngắn gọn>"
 }}"""
