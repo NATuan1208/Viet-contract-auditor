@@ -4,7 +4,7 @@ Inputs:  AuditState.audit_findings, AuditState.contract_domain, AuditState.confi
 Outputs: AuditState.final_report
 
 Two paths:
-    - confidence >= 0.3: Cerebras qwen-3-235b call with GENERATOR_SYSTEM_PROMPT
+    - confidence >= 0.3: configured LLM call with GENERATOR_SYSTEM_PROMPT
     - confidence < 0.3: pure template formatter (no LLM call)
 """
 
@@ -12,20 +12,21 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 
 from openai import AsyncOpenAI
 
+from core.llm_config import get_llm_settings
 from core.prompts import GENERATOR_SYSTEM_PROMPT
 from core.state import AuditState
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "qwen-3-235b-a22b-instruct-2507"
-_cerebras = AsyncOpenAI(
-    api_key=os.getenv("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
+_LLM_SETTINGS = get_llm_settings()
+_MODEL = _LLM_SETTINGS.model
+_llm_client = AsyncOpenAI(
+    api_key=_LLM_SETTINGS.api_key,
+    base_url=_LLM_SETTINGS.base_url,
 )
 
 
@@ -151,7 +152,7 @@ async def generator_node(state: AuditState) -> dict:
 
     if confidence >= 0.3 and findings and not error:
         try:
-            response = await _cerebras.chat.completions.create(
+            response = await _llm_client.chat.completions.create(
                 model=_MODEL,
                 messages=[{
                     "role": "user",

@@ -8,10 +8,10 @@ Hybrid optimization before LLM calls:
   - medium/high clauses are filtered by relevance:
       * include if clause has risk keywords
       * or include if clause/context keyword overlap is high enough
-Then calls Cerebras qwen-3-235b for analyzed clauses only (sequential, semaphore(1)).
+Then calls configured LLM for analyzed clauses only (sequential, semaphore(1)).
 Each clause receives its own legal_context section (matched by clause index, capped at 3000 chars).
 Exponential backoff retry on 429 / timeout (2s -> 4s -> 8s, max 3 retries).
-1.5s sleep between clause completions to respect Cerebras TPM.
+1.5s sleep between clause completions to reduce TPM pressure.
 confidence = fraction of findings with a non-empty reference_law.
 >50% analyzed clause failures -> pipeline error.
 """
@@ -26,21 +26,28 @@ import re
 
 from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 
+from core.llm_config import get_llm_settings
 from core.prompts import AUDIT_DEEP_SYSTEM_PROMPT, AUDIT_QUICK_SYSTEM_PROMPT
 from core.state import AuditState
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "qwen-3-235b-a22b-instruct-2507"
-_cerebras = AsyncOpenAI(
-    api_key=os.getenv("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
+_LLM_SETTINGS = get_llm_settings()
+_MODEL = _LLM_SETTINGS.model
+_llm_client = AsyncOpenAI(
+    api_key=_LLM_SETTINGS.api_key,
+    base_url=_LLM_SETTINGS.base_url,
 )
 
 _REQUIRED_FINDING_KEYS = {"clause", "violation", "reference_law", "suggested_fix"}
 _MAX_CONTEXT_PER_CLAUSE = 3000
 _RETRY_DELAYS = (2.0, 4.0, 8.0)  # exponential backoff for 429 / timeout
-_MIN_OVERLAP_KEYWORDS = int(os.getenv("AUDIT_MIN_OVERLAP_KEYWORDS", "2"))
+_MIN_OVERLAP_KEYWORDS = int(os.getenv("AUDIT_MIN_OVERLAP_KEYWORDS", "1"))
+_AUDIT_LOW_RISK_CLAUSES = os.getenv("AUDIT_LOW_RISK_CLAUSES", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 
 _RISK_KEYWORDS = [
     "phạt",
@@ -134,27 +141,62 @@ def _has_risk_keywords(clause: str) -> bool:
     return any(keyword in lowered for keyword in _RISK_KEYWORDS)
 
 
-def _should_audit_clause(clause: str, clause_context: str) -> tuple[bool, str]:
+def _has_structural_risk_signals(clause: str) -> bool:
+    """Detect common traps: numeric thresholds, unilateral rights, numbering gaps."""
+    lowered = clause.lower()
+
+    signal_patterns = [
+        r"\b\d+\s*%\b",
+        r"\b0?3\s+ngày\b",
+        r"mọi\s+trường\s+hợp",
+        r"không\s+cần\s+sự\s+chấp\s+thuận",
+        r"tự\s+động\s+có\s+hiệu\s+lực",
+        r"không\s+cần\s+hỏi\s+lại\s+ý\s+kiến",
+    ]
+    if any(re.search(pat, lowered) for pat in signal_patterns):
+        return True
+
+    # Numbering gap check (e.g. 2.1, 2.2, 2.3, 2.5 -> missing 2.4)
+    sub_items = [int(m.group(2)) for m in re.finditer(r"\b(\d+)\.(\d+)\b", clause)]
+    unique_sorted = sorted(set(sub_items))
+    if len(unique_sorted) >= 3:
+        for i in range(1, len(unique_sorted)):
+            if unique_sorted[i] - unique_sorted[i - 1] > 1:
+                return True
+
+    return False
+
+
+def _should_audit_clause(clause: str, clause_context: str, risk: str) -> tuple[bool, str]:
     """Hybrid relevance policy for medium/high-risk clauses."""
+    if risk == "high":
+        return True, "high_risk_forced"
+
     if _has_risk_keywords(clause):
         return True, "risk_keyword"
 
+    if _has_structural_risk_signals(clause):
+        return True, "structural_signal"
+
     if not clause_context.strip():
+        if risk in {"medium", "high"}:
+            return True, "no_context_medium_high"
         return False, "no_context_skip"
 
     clause_kw = _keyword_set(clause)
     context_kw = _keyword_set(clause_context)
     overlap = len(clause_kw & context_kw)
-    if overlap >= _MIN_OVERLAP_KEYWORDS:
+    threshold = _MIN_OVERLAP_KEYWORDS if risk in {"medium", "high"} else max(2, _MIN_OVERLAP_KEYWORDS)
+    if overlap >= threshold:
         return True, "context_overlap"
     return False, "low_relevance"
 
 
 async def _call_with_retry(chunk: str, clause_context: str, prompt_template: str) -> list[dict] | None:
-    """Call Cerebras with exponential backoff on 429 / timeout; return None on non-retriable error."""
+    """Call configured LLM with exponential backoff on 429 / timeout; return None on non-retriable error."""
     for attempt, delay in enumerate(_RETRY_DELAYS, start=1):
         try:
-            response = await _cerebras.chat.completions.create(
+            response = await _llm_client.chat.completions.create(
                 model=_MODEL,
                 messages=[{
                     "role": "user",
@@ -213,7 +255,10 @@ async def audit_node(state: AuditState) -> dict:
     skipped_by_relevance = 0
 
     route_reasons = {
+        "high_risk_forced": 0,
         "risk_keyword": 0,
+        "structural_signal": 0,
+        "no_context_medium_high": 0,
         "context_overlap": 0,
     }
 
@@ -223,7 +268,7 @@ async def audit_node(state: AuditState) -> dict:
 
     tasks: list[tuple[int, asyncio.Future]] = []
     for i, (chunk, ctx, risk) in enumerate(zip(chunks, clause_contexts, clause_risk_scores)):
-        if risk == "low":
+        if risk == "low" and not _AUDIT_LOW_RISK_CLAUSES:
             skipped_by_risk += 1
             skipped_clauses.append({
                 "clause_index": i,
@@ -232,7 +277,7 @@ async def audit_node(state: AuditState) -> dict:
             })
             continue
 
-        should_audit, reason = _should_audit_clause(chunk, ctx)
+        should_audit, reason = _should_audit_clause(chunk, ctx, risk)
         if not should_audit:
             skipped_by_relevance += 1
             skipped_clauses.append({
@@ -245,7 +290,8 @@ async def audit_node(state: AuditState) -> dict:
         if reason in route_reasons:
             route_reasons[reason] += 1
 
-        prompt_template = AUDIT_DEEP_SYSTEM_PROMPT if risk == "high" else AUDIT_QUICK_SYSTEM_PROMPT
+        # Use deep audit for medium/high to prioritise recall on nuanced legal traps.
+        prompt_template = AUDIT_DEEP_SYSTEM_PROMPT if risk in {"high", "medium"} else AUDIT_QUICK_SYSTEM_PROMPT
         tasks.append((i, _audit_clause(chunk, ctx, prompt_template)))
 
     analyzed_count = len(tasks)
@@ -263,11 +309,13 @@ async def audit_node(state: AuditState) -> dict:
         }
 
     # Process sequentially with 1.5s sleep between completions for analyzed clauses
-    for pos, (_, coro) in enumerate(tasks):
+    for pos, (clause_idx, coro) in enumerate(tasks):
         result = await coro
         if result is None:
             failed += 1
         else:
+            for finding in result:
+                finding.setdefault("clause_index", clause_idx)
             all_findings.extend(result)
         if pos < len(tasks) - 1:
             await asyncio.sleep(1.5)
@@ -287,13 +335,17 @@ async def audit_node(state: AuditState) -> dict:
     logger.info(
         (
             "audit_agent: total=%d, analyzed=%d, skipped_low=%d, skipped_relevance=%d, "
-            "routed_by_risk=%d, routed_by_overlap=%d, findings=%d, failed=%d, confidence=%.2f"
+            "forced_high=%d, routed_by_risk=%d, structural=%d, no_context_mh=%d, "
+            "routed_by_overlap=%d, findings=%d, failed=%d, confidence=%.2f"
         ),
         len(chunks),
         analyzed_count,
         skipped_by_risk,
         skipped_by_relevance,
+        route_reasons["high_risk_forced"],
         route_reasons["risk_keyword"],
+        route_reasons["structural_signal"],
+        route_reasons["no_context_medium_high"],
         route_reasons["context_overlap"],
         len(all_findings),
         failed,

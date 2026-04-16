@@ -4,8 +4,8 @@ Inputs:  AuditState.contract_text
 Outputs: AuditState.contract_domain, AuditState.chunks
 
 Classification logic:
-  1. Keyword-based (pure regex, no API call)
-  2. LLM fallback when keywords are ambiguous: Cerebras qwen-3-235b call
+    1. Keyword-based (pure regex, no API call)
+    2. LLM fallback when keywords are ambiguous
 
 Clause splitting logic:
   1. Pure-regex split at Điều boundaries
@@ -16,21 +16,17 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 
-from openai import AsyncOpenAI
-
+from core.llm_config import create_async_llm_client, get_llm_settings
 from core.legal_patterns import classify_domain_by_keywords, split_contract_into_clauses
 from core.prompts import CLAUSE_SPLIT_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT
 from core.state import AuditState
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "qwen-3-235b-a22b-instruct-2507"
-_cerebras = AsyncOpenAI(
-    api_key=os.getenv("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
-)
+_LLM_SETTINGS = get_llm_settings()
+_MODEL = _LLM_SETTINGS.model
+_llm_client = create_async_llm_client()
 
 
 async def router_node(state: AuditState) -> dict:
@@ -51,7 +47,7 @@ async def router_node(state: AuditState) -> dict:
     if domain is None:
         logger.info("router_agent: keyword classification inconclusive, calling LLM")
         try:
-            response = await _cerebras.chat.completions.create(
+            response = await _llm_client.chat.completions.create(
                 model=_MODEL,
                 messages=[
                     {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
@@ -60,7 +56,13 @@ async def router_node(state: AuditState) -> dict:
             )
             result = json.loads(response.choices[0].message.content)
             domain = result.get("domain", "Thương mại")
-            logger.info("router_agent: LLM domain=%s reason=%s", domain, result.get("reason", ""))
+            logger.info(
+                "router_agent: %s/%s domain=%s reason=%s",
+                _LLM_SETTINGS.provider,
+                _MODEL,
+                domain,
+                result.get("reason", ""),
+            )
         except Exception as exc:
             logger.error("router_agent: LLM classification failed: %s", exc)
             domain = "Thương mại"
@@ -75,7 +77,7 @@ async def router_node(state: AuditState) -> dict:
             "router_agent: only %d clause(s) from regex, calling LLM clause splitter", len(chunks)
         )
         try:
-            response = await _cerebras.chat.completions.create(
+            response = await _llm_client.chat.completions.create(
                 model=_MODEL,
                 messages=[
                     {"role": "system", "content": CLAUSE_SPLIT_SYSTEM_PROMPT},

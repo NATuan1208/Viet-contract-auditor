@@ -1,6 +1,6 @@
 """LightRAG production client.
 
-LLM:        Cerebras qwen-3-235b via OpenAI-compatible endpoint (CEREBRAS_API_KEY)
+LLM:        configurable OpenAI-compatible model (default gpt-4o-mini)
 Embeddings: sentence-transformers paraphrase-multilingual-MiniLM-L12-v2 (dim=384, local)
 Storage:    Neo4j + Qdrant + PostgreSQL (credentials from .env)
 
@@ -16,15 +16,18 @@ import os
 import numpy as np
 from openai import RateLimitError
 
+from core.llm_config import get_llm_settings
+
 logger = logging.getLogger(__name__)
 
-_MODEL = "qwen-3-235b-a22b-instruct-2507"
+_LLM_SETTINGS = get_llm_settings()
+_MODEL = _LLM_SETTINGS.model
 _EMBED_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _EMBED_DIM = 384
 
 _rag_instance = None
 _rag_lock: asyncio.Lock | None = None
-_llm_call_count: int = 0  # incremented on every _cerebras_llm invocation
+_llm_call_count: int = 0  # incremented on every _lightrag_llm invocation
 
 
 def _get_lock() -> asyncio.Lock:
@@ -35,7 +38,7 @@ def _get_lock() -> asyncio.Lock:
     return _rag_lock
 
 
-async def _cerebras_llm(
+async def _lightrag_llm(
     prompt: str,
     system_prompt: str | None = None,
     history_messages: list | None = None,
@@ -43,7 +46,7 @@ async def _cerebras_llm(
     keyword_extraction: bool = False,
     **kwargs,
 ) -> str:
-    """LightRAG-compatible llm_model_func backed by Cerebras via openai_complete_if_cache.
+    """LightRAG-compatible llm_model_func backed by configured OpenAI-compatible API.
 
     Inherits tenacity retry logic (RateLimitError, APIConnectionError, APITimeoutError).
     Logs every invocation as INFO so rate-limit debugging is possible without --verbose.
@@ -63,8 +66,8 @@ async def _cerebras_llm(
             history_messages=history_messages or [],
             enable_cot=enable_cot,
             keyword_extraction=keyword_extraction,
-            base_url="https://api.cerebras.ai/v1",
-            api_key=os.getenv("CEREBRAS_API_KEY"),
+            base_url=_LLM_SETTINGS.base_url,
+            api_key=_LLM_SETTINGS.api_key,
             **kwargs,
         )
     except RateLimitError:
@@ -90,8 +93,10 @@ async def get_rag_client():
             return _rag_instance
 
         logger.info(
-            "Initialising LightRAG client (%s + Cerebras + Neo4j/Qdrant/PG)...",
+            "Initialising LightRAG client (%s + %s/%s + Neo4j/Qdrant/PG)...",
             _EMBED_MODEL_NAME,
+            _LLM_SETTINGS.provider,
+            _MODEL,
         )
 
         # --- local embedding model ---
@@ -127,7 +132,7 @@ async def get_rag_client():
             doc_status_storage="PGDocStatusStorage",
             graph_storage="Neo4JStorage",
             vector_storage="QdrantVectorDBStorage",
-            llm_model_func=_cerebras_llm,
+            llm_model_func=_lightrag_llm,
             embedding_func=embed_func,
         )
         await rag.initialize_storages()

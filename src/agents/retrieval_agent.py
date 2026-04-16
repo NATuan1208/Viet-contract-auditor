@@ -8,8 +8,8 @@ Outputs: AuditState.legal_context, AuditState.retrieved_clause_indices
 Queries LightRAG hybrid (Neo4j graph + Qdrant vector + PG KV) for each clause.
 Additionally fires one query per unique "Điều X" cross-reference detected by
 the preprocessor (xref expansion), labelled as "### Tham chiếu pháp lý:" sections.
-Semaphore(1) serialises queries — LightRAG hybrid internally calls _cerebras_llm,
-so concurrent queries = concurrent Cerebras calls which triggers rate limits.
+Semaphore(1) serialises queries — LightRAG hybrid internally calls shared LLM,
+so concurrent queries can still trigger rate limits.
 Exponential backoff on all exceptions (2s → 4s → 8s, max 3 retries).
 1s inter-query sleep mirrors audit_agent pacing.
 Deduplicates passages by MD5 of first 100 chars.
@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 
 from core.lightrag_client import get_rag_client, query_hybrid
 from core.state import AuditState
@@ -29,6 +30,11 @@ from core.state import AuditState
 logger = logging.getLogger(__name__)
 
 _RETRY_DELAYS = (2.0, 4.0, 8.0)  # exponential backoff for any query failure
+_RETRIEVE_LOW_RISK_CLAUSES = os.getenv("RETRIEVE_LOW_RISK_CLAUSES", "1").strip().lower() not in {
+    "0",
+    "false",
+    "no",
+}
 
 
 async def retrieval_node(state: AuditState) -> dict:
@@ -46,9 +52,12 @@ async def retrieval_node(state: AuditState) -> dict:
     if len(clause_risk_scores) != len(chunks):
         clause_risk_scores = ["medium"] * len(chunks)
 
-    active_clause_indices = [
-        i for i, risk in enumerate(clause_risk_scores) if risk in {"medium", "high"}
-    ]
+    if _RETRIEVE_LOW_RISK_CLAUSES:
+        active_clause_indices = list(range(len(chunks)))
+    else:
+        active_clause_indices = [
+            i for i, risk in enumerate(clause_risk_scores) if risk in {"medium", "high"}
+        ]
 
     if not active_clause_indices:
         logger.warning("retrieval_agent: all clauses marked low-risk, skipping retrieval")

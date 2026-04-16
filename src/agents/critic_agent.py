@@ -7,7 +7,7 @@ Outputs: AuditState.negations_found, AuditState.critic_feedback,
          AuditState.error_type
 
 Layer 1 (no LLM): regex scan of legal_context for negation/exception patterns.
-Layer 2 (LLM, Cerebras): called only when Layer 1 finds negations OR confidence < 0.7.
+Layer 2 (LLM): called only when Layer 1 finds negations OR confidence < 0.7.
   Checks: missed exceptions, reference_law validity, adjusted confidence, refined_query.
 """
 
@@ -15,21 +15,22 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 from typing import Any, cast
 
 from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 
+from core.llm_config import get_llm_settings
 from core.prompts import CRITIC_SYSTEM_PROMPT
 from core.state import AuditState, ContextQualityStatus, ErrorType
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "qwen-3-235b-a22b-instruct-2507"
-_cerebras = AsyncOpenAI(
-    api_key=os.getenv("CEREBRAS_API_KEY"),
-    base_url="https://api.cerebras.ai/v1",
+_LLM_SETTINGS = get_llm_settings()
+_MODEL = _LLM_SETTINGS.model
+_llm_client = AsyncOpenAI(
+    api_key=_LLM_SETTINGS.api_key,
+    base_url=_LLM_SETTINGS.base_url,
 )
 
 # ---------------------------------------------------------------------------
@@ -198,7 +199,7 @@ async def critic_node(state: AuditState) -> dict:
         }
 
     # ------------------------------------------------------------------
-    # Layer 2 — LLM critic (Cerebras)
+    # Layer 2 — LLM critic
     # ------------------------------------------------------------------
     logger.info(
         "critic: calling LLM critic (negations=%d, confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d)",
@@ -225,7 +226,7 @@ async def critic_node(state: AuditState) -> dict:
     error_type: ErrorType = "low_confidence"
 
     try:
-        response = await _cerebras.chat.completions.create(
+        response = await _llm_client.chat.completions.create(
             model=_MODEL,
             messages=[{
                 "role": "user",

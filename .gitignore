@@ -10,6 +10,9 @@ build/
 .venv/
 venv/
 
+# Secrets
+.env
+
 # Report outputs (test artifacts, never commit)
 report*.md
 
