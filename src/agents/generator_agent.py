@@ -35,10 +35,12 @@ def _template_report(state: AuditState) -> str:
     domain = state.get("contract_domain", "Chưa xác định")
     confidence = state.get("confidence", 0.0)
     error_type = state.get("error_type", "low_confidence")
-    context_quality = state.get("context_quality", 0.0)
+    context_quality = state.get("context_quality", "poor")
+    context_quality_score = state.get("context_quality_score", 0.0)
     retry_count = state.get("retry_count", 0)
     chunks = state.get("chunks", [])
     negations = state.get("negations_found", [])
+    skipped_clauses = state.get("skipped_clauses", [])
     error = state.get("error")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -62,6 +64,8 @@ def _template_report(state: AuditState) -> str:
             f"Đã kiểm tra **{len(chunks)}** điều khoản, "
             f"phát hiện **{len(findings)}** mục cần xem xét{stub_note}."
         )
+        if skipped_clauses:
+            lines.append(f"Đã bỏ qua **{len(skipped_clauses)}** điều khoản rủi ro thấp.")
 
     lines += [
         "",
@@ -83,6 +87,20 @@ def _template_report(state: AuditState) -> str:
                 f"- **Khuyến nghị sửa đổi:** {f.get('suggested_fix', '')}",
                 "",
             ]
+
+    lines += [
+        "",
+        "## Điều khoản Bỏ Qua (Rủi ro thấp)",
+        "",
+    ]
+    if skipped_clauses:
+        for item in skipped_clauses:
+            idx = int(item.get("clause_index", -1)) + 1
+            reason = item.get("reason", "Skipped - Low Risk")
+            preview = item.get("clause_preview", "")
+            lines.append(f"- Điều khoản {idx}: {reason} — {preview}")
+    else:
+        lines.append("Không có điều khoản nào bị bỏ qua.")
 
     # --- Negations section (always present) ---
     lines += [
@@ -109,7 +127,7 @@ def _template_report(state: AuditState) -> str:
         "",
         "---",
         f"*Lĩnh vực: **{domain}** | Điểm tin cậy: {confidence:.2f} | "
-        f"Chất lượng ngữ cảnh: {context_quality:.2f} | Loại lỗi: {error_type} | "
+        f"Chất lượng ngữ cảnh: {context_quality} ({context_quality_score:.2f}) | Loại lỗi: {error_type} | "
         f"Số lần critic: {retry_count} | Điều khoản: {len(chunks)} | "
         f"Vi phạm: {len(findings)} | {now}*",
     ]

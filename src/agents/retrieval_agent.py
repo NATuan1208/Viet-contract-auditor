@@ -1,8 +1,9 @@
 """Retrieval Agent — queries LightRAG to build legal context.
 
 Inputs:  AuditState.segmented_chunks (preferred) | AuditState.chunks,
-         AuditState.contract_domain, AuditState.cross_refs
-Outputs: AuditState.legal_context
+         AuditState.contract_domain, AuditState.cross_refs,
+         AuditState.clause_risk_scores
+Outputs: AuditState.legal_context, AuditState.retrieved_clause_indices
 
 Queries LightRAG hybrid (Neo4j graph + Qdrant vector + PG KV) for each clause.
 Additionally fires one query per unique "Điều X" cross-reference detected by
@@ -35,11 +36,23 @@ async def retrieval_node(state: AuditState) -> dict:
     # Prefer word-tokenised chunks from preprocessor; fall back to raw chunks
     chunks: list[str] = state.get("segmented_chunks") or state.get("chunks", [])
     cross_refs: list[dict] = state.get("cross_refs", [])
+    clause_risk_scores = state.get("clause_risk_scores", [])
     domain: str = state.get("contract_domain", "")
 
     if not chunks:
         logger.warning("retrieval_agent: no chunks to retrieve for")
-        return {"legal_context": ""}
+        return {"legal_context": "", "retrieved_clause_indices": []}
+
+    if len(clause_risk_scores) != len(chunks):
+        clause_risk_scores = ["medium"] * len(chunks)
+
+    active_clause_indices = [
+        i for i, risk in enumerate(clause_risk_scores) if risk in {"medium", "high"}
+    ]
+
+    if not active_clause_indices:
+        logger.warning("retrieval_agent: all clauses marked low-risk, skipping retrieval")
+        return {"legal_context": "", "retrieved_clause_indices": []}
 
     rag = await get_rag_client()
     sem = asyncio.Semaphore(1)
@@ -68,23 +81,29 @@ async def retrieval_node(state: AuditState) -> dict:
         async with sem:
             return await _query_with_retry(text)
 
-    # --- Clause queries (one per segmented chunk) ---
-    clause_queries: list[str] = list(chunks)
+    # --- Clause queries (one per medium/high segmented chunk) ---
+    clause_queries: list[tuple[int, str]] = [(i, chunks[i]) for i in active_clause_indices]
 
     # --- Xref-expansion queries (one per unique "Điều X" reference) ---
-    xref_queries: list[str] = []
+    xref_queries: list[tuple[str, int | None]] = []
     seen_xrefs: set[str] = set()
     for ref in cross_refs:
+        clause_index = ref.get("clause_index")
+        if isinstance(clause_index, int) and clause_index not in active_clause_indices:
+            continue
         if ref.get("type") == "dieu":
             q = f"{ref['value']} {domain}".strip()
             if q not in seen_xrefs:
                 seen_xrefs.add(q)
-                xref_queries.append(q)
+                xref_queries.append((q, clause_index if isinstance(clause_index, int) else None))
 
-    all_queries = clause_queries + xref_queries
+    query_specs: list[dict] = (
+        [{"kind": "clause", "clause_index": i, "text": text} for i, text in clause_queries]
+        + [{"kind": "xref", "clause_index": idx, "text": text} for text, idx in xref_queries]
+    )
 
     # Process sequentially with 1s inter-query sleep (mirrors audit_agent pacing)
-    tasks = [_query(q) for q in all_queries]
+    tasks = [_query(spec["text"]) for spec in query_specs]
     raw_results: list[str] = []
     for i, coro in enumerate(tasks):
         result = await coro
@@ -94,26 +113,34 @@ async def retrieval_node(state: AuditState) -> dict:
 
     seen_md5: set[str] = set()
     sections: list[str] = []
+    retrieved_clause_indices: set[int] = set()
     for i, result in enumerate(raw_results):
         if not result:
             continue
-        key = hashlib.md5(result[:100].encode()).hexdigest()
+        spec = query_specs[i]
+        key = hashlib.md5(result.encode()).hexdigest()
         if key in seen_md5:
             continue
         seen_md5.add(key)
-        if i < len(clause_queries):
-            sections.append(f"### Điều khoản {i + 1}\n{result}\n")
+
+        if spec["kind"] == "clause":
+            clause_index = int(spec["clause_index"])
+            retrieved_clause_indices.add(clause_index)
+            sections.append(f"### Điều khoản {clause_index + 1}\n{result}\n")
         else:
-            xref_q = xref_queries[i - len(clause_queries)]
+            xref_q = spec["text"]
             sections.append(f"### Tham chiếu pháp lý: {xref_q}\n{result}\n")
 
     legal_context = "\n".join(sections)
     logger.warning(
-        "retrieval: %d vector chunks retrieved (%d clause + %d xref queries, %d unique, %d chars)",
+        "retrieval: %d vector chunks retrieved (%d active clauses + %d xref queries, %d unique, %d chars)",
         sum(1 for r in raw_results if r),
         len(clause_queries),
         len(xref_queries),
         len(sections),
         len(legal_context),
     )
-    return {"legal_context": legal_context}
+    return {
+        "legal_context": legal_context,
+        "retrieved_clause_indices": sorted(retrieved_clause_indices),
+    }

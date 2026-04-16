@@ -22,7 +22,7 @@ from typing import Any, cast
 from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 
 from core.prompts import CRITIC_SYSTEM_PROMPT
-from core.state import AuditState, ErrorType
+from core.state import AuditState, ContextQualityStatus, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,28 @@ def _normalize_error_type(value: Any) -> ErrorType:
     return "low_confidence"
 
 
+def _normalize_context_quality_status(value: Any) -> ContextQualityStatus:
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in {"good", "poor", "missing_refs"}:
+            return cast(ContextQualityStatus, cleaned)
+    return "poor"
+
+
+def _status_to_score(status: ContextQualityStatus) -> float:
+    if status == "good":
+        return 0.8
+    if status == "missing_refs":
+        return 0.35
+    return 0.25
+
+
+def _score_to_status(score: float, reference_law_valid: bool) -> ContextQualityStatus:
+    if not reference_law_valid and score < 0.6:
+        return "missing_refs"
+    return "good" if score >= 0.6 else "poor"
+
+
 def _estimate_context_quality(legal_context: str, findings: list[dict], confidence: float) -> float:
     # Baseline heuristic for Phase 1 routing safety before full context validator.
     context_len = len(legal_context.strip())
@@ -114,9 +136,15 @@ async def critic_node(state: AuditState) -> dict:
     findings: list[dict] = state.get("audit_findings", [])
     confidence: float = _clamp01(float(state.get("confidence", 0.0)))
     retry_count: int = state.get("retry_count", 0)
-    context_quality: float = _clamp01(
-        float(state.get("context_quality", _estimate_context_quality(legal_context, findings, confidence)))
+    context_quality_status: ContextQualityStatus = _normalize_context_quality_status(
+        state.get("context_quality", "poor")
     )
+    context_quality_score: float = _clamp01(
+        float(state.get("context_quality_score", _status_to_score(context_quality_status)))
+    )
+    if context_quality_score == 0.0 and legal_context:
+        context_quality_score = _estimate_context_quality(legal_context, findings, confidence)
+        context_quality_status = _score_to_status(context_quality_score, True)
 
     # ------------------------------------------------------------------
     # Layer 1 — regex negation scan (no LLM)
@@ -137,26 +165,34 @@ async def critic_node(state: AuditState) -> dict:
         "missed_exceptions": [],
         "reference_law_valid": True,
         "adjusted_confidence": confidence,
-        "context_quality": context_quality,
+        "context_quality_score": context_quality_score,
+        "context_quality_status": context_quality_status,
         "refined_query": None,
         "parse_ok": True,
         "reason": "Layer-1 pass, no additional review needed.",
     }
 
-    layer2_needed = bool(negations_found) or confidence < 0.7 or context_quality < 0.6
+    layer2_needed = (
+        bool(negations_found)
+        or confidence < 0.7
+        or context_quality_status != "good"
+        or context_quality_score < 0.6
+    )
 
     if not layer2_needed:
         logger.warning(
-            "critic: confidence=%.2f, context_quality=%.2f, retry=%d — layer-2 skipped",
+            "critic: confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d — layer-2 skipped",
             confidence,
-            context_quality,
+            context_quality_status,
+            context_quality_score,
             retry_count + 1,
         )
         return {
             "negations_found": negations_found,
             "critic_feedback": critic_feedback,
             "confidence": confidence,
-            "context_quality": context_quality,
+            "context_quality": context_quality_status,
+            "context_quality_score": context_quality_score,
             "error_type": "ok",
             "retry_count": retry_count + 1,
         }
@@ -165,10 +201,11 @@ async def critic_node(state: AuditState) -> dict:
     # Layer 2 — LLM critic (Cerebras)
     # ------------------------------------------------------------------
     logger.info(
-        "critic: calling LLM critic (negations=%d, confidence=%.2f, context_quality=%.2f, retry=%d)",
+        "critic: calling LLM critic (negations=%d, confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d)",
         len(negations_found),
         confidence,
-        context_quality,
+        context_quality_status,
+        context_quality_score,
         retry_count + 1,
     )
 
@@ -205,23 +242,27 @@ async def critic_node(state: AuditState) -> dict:
 
         parse_ok = bool(data)
         adjusted = _clamp01(float(data.get("confidence", confidence)))
-        parsed_context_quality = _clamp01(float(data.get("context_quality", context_quality)))
+        parsed_context_score = _clamp01(float(data.get("context_quality", context_quality_score)))
+        reference_law_valid = bool(data.get("reference_law_valid", True))
         error_type = _normalize_error_type(data.get("error_type"))
-        if data.get("reference_law_valid") is False:
+        if not reference_law_valid:
             error_type = "hallucination"
+        parsed_context_status = _score_to_status(parsed_context_score, reference_law_valid)
 
         critic_feedback.update({
             "layer2_called": True,
             "missed_exceptions": data.get("missed_exceptions", []),
-            "reference_law_valid": bool(data.get("reference_law_valid", True)),
+            "reference_law_valid": reference_law_valid,
             "adjusted_confidence": adjusted,
-            "context_quality": parsed_context_quality,
+            "context_quality_score": parsed_context_score,
+            "context_quality_status": parsed_context_status,
             "refined_query": data.get("refined_query"),
             "parse_ok": parse_ok,
             "reason": str(data.get("reason") or "Layer-2 decision applied."),
         })
         confidence = adjusted
-        context_quality = parsed_context_quality
+        context_quality_score = parsed_context_score
+        context_quality_status = parsed_context_status
 
     except (RateLimitError, APITimeoutError) as exc:
         logger.warning("critic: LLM rate-limited, using layer-1 result only: %s", exc)
@@ -247,9 +288,10 @@ async def critic_node(state: AuditState) -> dict:
         error_type = "hallucination"
 
     logger.warning(
-        "critic: confidence=%.2f, context_quality=%.2f, error_type=%s, retry=%d",
+        "critic: confidence=%.2f, context_quality=%s, quality_score=%.2f, error_type=%s, retry=%d",
         confidence,
-        context_quality,
+        context_quality_status,
+        context_quality_score,
         error_type,
         retry_count + 1,
     )
@@ -257,7 +299,8 @@ async def critic_node(state: AuditState) -> dict:
         "negations_found": negations_found,
         "critic_feedback": critic_feedback,
         "confidence": confidence,
-        "context_quality": context_quality,
+        "context_quality": context_quality_status,
+        "context_quality_score": context_quality_score,
         "error_type": error_type,
         "retry_count": retry_count + 1,
     }
