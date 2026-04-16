@@ -1,10 +1,11 @@
 """Critic Agent — validates audit findings for missed negations and confidence.
 
 Inputs:  AuditState.legal_context, AuditState.audit_findings,
-         AuditState.confidence, AuditState.retry_count
+         AuditState.confidence, AuditState.retry_count,
+         AuditState.context_quality, AuditState.context_quality_label
 Outputs: AuditState.negations_found, AuditState.critic_feedback,
          AuditState.confidence (possibly adjusted), AuditState.retry_count (+1),
-         AuditState.error_type
+         AuditState.error_type, AuditState.context_quality_label
 
 Layer 1 (no LLM): regex scan of legal_context for negation/exception patterns.
 Layer 2 (LLM, Cerebras): called only when Layer 1 finds negations OR confidence < 0.7.
@@ -22,7 +23,7 @@ from typing import Any, cast
 from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 
 from core.prompts import CRITIC_SYSTEM_PROMPT
-from core.state import AuditState, ErrorType
+from core.state import AuditState, ContextQualityLabel, ErrorType
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,18 @@ def _normalize_error_type(value: Any) -> ErrorType:
     return "low_confidence"
 
 
+def _label_from_score(score: float) -> ContextQualityLabel:
+    return "good" if _clamp01(score) >= 0.6 else "bad"
+
+
+def _normalize_context_quality_label(value: Any, score: float) -> ContextQualityLabel:
+    if isinstance(value, str):
+        cleaned = value.strip().lower()
+        if cleaned in {"good", "bad"}:
+            return cast(ContextQualityLabel, cleaned)
+    return _label_from_score(score)
+
+
 def _estimate_context_quality(legal_context: str, findings: list[dict], confidence: float) -> float:
     # Baseline heuristic for Phase 1 routing safety before full context validator.
     context_len = len(legal_context.strip())
@@ -117,6 +130,12 @@ async def critic_node(state: AuditState) -> dict:
     context_quality: float = _clamp01(
         float(state.get("context_quality", _estimate_context_quality(legal_context, findings, confidence)))
     )
+    context_feedback = state.get("context_validator_feedback", {})
+    context_reasons = set(context_feedback.get("reasons", []))
+    context_quality_label = _normalize_context_quality_label(
+        state.get("context_quality_label"),
+        context_quality,
+    )
 
     # ------------------------------------------------------------------
     # Layer 1 — regex negation scan (no LLM)
@@ -143,7 +162,11 @@ async def critic_node(state: AuditState) -> dict:
         "reason": "Layer-1 pass, no additional review needed.",
     }
 
-    layer2_needed = bool(negations_found) or confidence < 0.7 or context_quality < 0.6
+    layer2_needed = (
+        bool(negations_found)
+        or confidence < 0.7
+        or context_quality_label == "bad"
+    )
 
     if not layer2_needed:
         logger.warning(
@@ -157,6 +180,7 @@ async def critic_node(state: AuditState) -> dict:
             "critic_feedback": critic_feedback,
             "confidence": confidence,
             "context_quality": context_quality,
+            "context_quality_label": context_quality_label,
             "error_type": "ok",
             "retry_count": retry_count + 1,
         }
@@ -206,6 +230,7 @@ async def critic_node(state: AuditState) -> dict:
         parse_ok = bool(data)
         adjusted = _clamp01(float(data.get("confidence", confidence)))
         parsed_context_quality = _clamp01(float(data.get("context_quality", context_quality)))
+        parsed_context_quality_label = _label_from_score(parsed_context_quality)
         error_type = _normalize_error_type(data.get("error_type"))
         if data.get("reference_law_valid") is False:
             error_type = "hallucination"
@@ -222,6 +247,7 @@ async def critic_node(state: AuditState) -> dict:
         })
         confidence = adjusted
         context_quality = parsed_context_quality
+        context_quality_label = parsed_context_quality_label
 
     except (RateLimitError, APITimeoutError) as exc:
         logger.warning("critic: LLM rate-limited, using layer-1 result only: %s", exc)
@@ -240,6 +266,12 @@ async def critic_node(state: AuditState) -> dict:
 
     if error_type == "ok" and confidence < 0.7:
         error_type = "low_confidence"
+    if error_type == "ok" and context_quality_label == "bad":
+        error_type = "low_confidence"
+    if error_type == "ok" and context_reasons.intersection(
+        {"context_too_short", "missing_clause_sections", "low_xref_coverage"}
+    ):
+        error_type = "low_confidence"
     if error_type == "ok" and negations_found:
         error_type = "reasoning"
 
@@ -247,9 +279,10 @@ async def critic_node(state: AuditState) -> dict:
         error_type = "hallucination"
 
     logger.warning(
-        "critic: confidence=%.2f, context_quality=%.2f, error_type=%s, retry=%d",
+        "critic: confidence=%.2f, context_quality=%.2f (%s), error_type=%s, retry=%d",
         confidence,
         context_quality,
+        context_quality_label,
         error_type,
         retry_count + 1,
     )
@@ -258,6 +291,7 @@ async def critic_node(state: AuditState) -> dict:
         "critic_feedback": critic_feedback,
         "confidence": confidence,
         "context_quality": context_quality,
+        "context_quality_label": context_quality_label,
         "error_type": error_type,
         "retry_count": retry_count + 1,
     }

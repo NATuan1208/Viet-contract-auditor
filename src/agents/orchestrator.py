@@ -2,7 +2,9 @@
 
 Graph:
     START → router → [ok: preprocessor | error: generator]
-    → preprocessor → retrieval → audit → critic
+    → preprocessor → retrieval → context_validator
+    → [retry_retrieval|proceed_audit]
+    → audit → critic
     → [to_retrieval|to_audit|finalize] → generator → END
 
 This is the only file in src/ that imports from langgraph.
@@ -15,6 +17,7 @@ import logging
 from langgraph.graph import END, StateGraph
 
 from agents.audit_agent import audit_node
+from agents.context_validator_agent import context_validator_node
 from agents.critic_agent import critic_node
 from agents.generator_agent import generator_node
 from agents.preprocessor_agent import preprocessor_node
@@ -24,6 +27,31 @@ from core.state import AuditState
 
 logger = logging.getLogger(__name__)
 MAX_RETRY = 2
+MAX_CONTEXT_RETRY = 2
+
+
+def route_after_context_validator(state: AuditState) -> str:
+    """Conditional edge: retry retrieval on bad context until retry cap."""
+    quality_label = state.get("context_quality_label", "bad")
+    context_retry_count = state.get("context_retry_count", 0)
+    context_quality = state.get("context_quality", 0.0)
+
+    if quality_label == "bad" and context_retry_count < MAX_CONTEXT_RETRY:
+        logger.info(
+            "route_after_context_validator: retry retrieval (label=%s, quality=%.2f, retry=%d)",
+            quality_label,
+            context_quality,
+            context_retry_count,
+        )
+        return "retry_retrieval"
+
+    logger.info(
+        "route_after_context_validator: proceed to audit (label=%s, quality=%.2f, retry=%d)",
+        quality_label,
+        context_quality,
+        context_retry_count,
+    )
+    return "proceed_audit"
 
 
 def route_after_critic(state: AuditState) -> str:
@@ -79,6 +107,7 @@ _builder = StateGraph(AuditState)
 _builder.add_node("router", router_node)
 _builder.add_node("preprocessor", preprocessor_node)
 _builder.add_node("retrieval", retrieval_node)
+_builder.add_node("context_validator", context_validator_node)
 _builder.add_node("audit", audit_node)
 _builder.add_node("critic", critic_node)
 _builder.add_node("generator", generator_node)
@@ -90,7 +119,15 @@ _builder.add_conditional_edges(
     {"ok": "preprocessor", "error": "generator"},
 )
 _builder.add_edge("preprocessor", "retrieval")
-_builder.add_edge("retrieval", "audit")
+_builder.add_edge("retrieval", "context_validator")
+_builder.add_conditional_edges(
+    "context_validator",
+    route_after_context_validator,
+    {
+        "retry_retrieval": "retrieval",
+        "proceed_audit": "audit",
+    },
+)
 _builder.add_edge("audit", "critic")
 _builder.add_conditional_edges(
     "critic",
@@ -127,7 +164,9 @@ async def run_audit(contract_text: str) -> AuditState:
         "segmented_chunks": [],
         "cross_refs": [],
         "negations_found": [],
+        "context_validator_feedback": {},
         "critic_feedback": {},
+        "context_retry_count": 0,
         "retry_count": 0,
         "error_type": "low_confidence",
         "legal_context": "",
@@ -135,6 +174,7 @@ async def run_audit(contract_text: str) -> AuditState:
         "final_report": "",
         "confidence": 0.0,
         "context_quality": 0.0,
+        "context_quality_label": "bad",
         "error": None,
     }
 

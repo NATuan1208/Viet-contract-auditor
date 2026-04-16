@@ -36,6 +36,8 @@ def _template_report(state: AuditState) -> str:
     confidence = state.get("confidence", 0.0)
     error_type = state.get("error_type", "low_confidence")
     context_quality = state.get("context_quality", 0.0)
+    context_quality_label = state.get("context_quality_label", "bad")
+    context_retry_count = state.get("context_retry_count", 0)
     retry_count = state.get("retry_count", 0)
     chunks = state.get("chunks", [])
     negations = state.get("negations_found", [])
@@ -109,7 +111,8 @@ def _template_report(state: AuditState) -> str:
         "",
         "---",
         f"*Lĩnh vực: **{domain}** | Điểm tin cậy: {confidence:.2f} | "
-        f"Chất lượng ngữ cảnh: {context_quality:.2f} | Loại lỗi: {error_type} | "
+        f"Chất lượng ngữ cảnh: {context_quality:.2f} ({context_quality_label}) | "
+        f"Loại lỗi: {error_type} | Số lần context retry: {context_retry_count} | "
         f"Số lần critic: {retry_count} | Điều khoản: {len(chunks)} | "
         f"Vi phạm: {len(findings)} | {now}*",
     ]

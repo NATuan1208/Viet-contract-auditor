@@ -6,6 +6,7 @@ from typing import Literal, TypedDict
 
 
 ErrorType = Literal["hallucination", "reasoning", "low_confidence", "ok"]
+ContextQualityLabel = Literal["good", "bad"]
 
 
 class CriticFeedback(TypedDict, total=False):
@@ -22,6 +23,19 @@ class CriticFeedback(TypedDict, total=False):
     context_quality: float
 
 
+class ContextValidatorFeedback(TypedDict, total=False):
+    """Structured diagnostics produced by the context validator node."""
+
+    section_count: int
+    chunk_count: int
+    section_ratio: float
+    mapped_ratio: float
+    xref_count: int
+    xref_coverage: float
+    context_length: int
+    reasons: list[str]
+
+
 class AuditState(TypedDict):
     """State passed between all agents in the audit pipeline."""
 
@@ -31,7 +45,9 @@ class AuditState(TypedDict):
     segmented_chunks: list[str]  # word-tokenised clauses (from preprocessor)
     cross_refs: list[dict]       # legal cross-references per clause (from preprocessor)
     negations_found: list[str]   # negation strings found by critic layer-1
+    context_validator_feedback: ContextValidatorFeedback
     critic_feedback: CriticFeedback
+    context_retry_count: int      # context-validator retry counter (0-based)
     retry_count: int             # critic retry counter (0-based)
     error_type: ErrorType        # route decision from critic
     legal_context: str           # Markdown assembled from LightRAG queries
@@ -39,4 +55,5 @@ class AuditState(TypedDict):
     final_report: str            # formatted Vietnamese Markdown report
     confidence: float            # bounded score in [0.0, 1.0]
     context_quality: float       # bounded score in [0.0, 1.0]
+    context_quality_label: ContextQualityLabel
     error: str | None            # per-agent error propagation
