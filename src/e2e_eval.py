@@ -301,22 +301,39 @@ async def _main() -> int:
         help="Optional contract file (.docx/.txt). If omitted, use perturbed_contract_text from groundtruth.",
     )
     parser.add_argument("--groundtruth", type=Path, required=True)
-    parser.add_argument("--report-out", type=Path, required=True)
+    parser.add_argument(
+        "--report-out",
+        type=Path,
+        default=None,
+        help="Where to write final Markdown report (default: reports/final_outputs/<name>_report.md)",
+    )
     parser.add_argument(
         "--eval-out",
         type=Path,
-        default=Path("report_e2e_eval.md"),
-        help="Where to write evaluation markdown",
+        default=None,
+        help="Where to write evaluation markdown (default: reports/metrics/<name>_eval.md)",
     )
     parser.add_argument(
         "--state-out",
         type=Path,
-        default=Path("audit_state_e2e.json"),
-        help="Where to write raw final AuditState JSON",
+        default=None,
+        help="Where to write raw final AuditState JSON (default: reports/metrics/<name>_state.json)",
     )
     args = parser.parse_args()
 
     gt_data = json.loads(args.groundtruth.read_text(encoding="utf-8"))
+    
+    # Determine base name for outputs
+    base_name = args.contract.stem if args.contract else args.groundtruth.stem.replace("groundtruth_", "")
+    
+    report_out = args.report_out or Path(f"reports/final_outputs/{base_name}_report.md")
+    eval_out = args.eval_out or Path(f"reports/metrics/{base_name}_eval.md")
+    state_out = args.state_out or Path(f"reports/metrics/{base_name}_state.json")
+    
+    # Ensure directories exist
+    report_out.parent.mkdir(parents=True, exist_ok=True)
+    eval_out.parent.mkdir(parents=True, exist_ok=True)
+    state_out.parent.mkdir(parents=True, exist_ok=True)
 
     if args.contract is not None:
         contract_text = _read_contract(args.contract)
@@ -330,9 +347,9 @@ async def _main() -> int:
     state = await run_audit(contract_text)
 
     report = state.get("final_report") or "_(no report generated)_"
-    args.report_out.write_text(report, encoding="utf-8")
+    report_out.write_text(report, encoding="utf-8")
 
-    args.state_out.write_text(
+    state_out.write_text(
         json.dumps(state, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -343,7 +360,7 @@ async def _main() -> int:
     matches, precision, recall, f1 = _score_groundtruth_matches(gt_vulns, pred_sections)
 
     eval_md = _build_eval_markdown(
-        report_path=args.report_out,
+        report_path=report_out,
         gt_path=args.groundtruth,
         pred_count=len(pred_sections),
         gt_count=len(gt_vulns),
@@ -353,11 +370,11 @@ async def _main() -> int:
         matches=matches,
         gt_vulns=gt_vulns,
     )
-    args.eval_out.write_text(eval_md, encoding="utf-8")
+    eval_out.write_text(eval_md, encoding="utf-8")
 
-    print(f"Report written: {args.report_out}")
-    print(f"State written: {args.state_out}")
-    print(f"Evaluation written: {args.eval_out}")
+    print(f"Report written: {report_out}")
+    print(f"State written: {state_out}")
+    print(f"Evaluation written: {eval_out}")
     print(
         "Heuristic metrics => "
         f"precision={precision:.3f}, recall={recall:.3f}, f1={f1:.3f}, "

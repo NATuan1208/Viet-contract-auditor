@@ -74,7 +74,7 @@ def _parse_args() -> argparse.Namespace:
         "--output", "-o",
         type=Path,
         default=None,
-        help="Write Markdown report to this file (default: stdout)",
+        help="Write Markdown report to this file. Defaults to reports/final_outputs/<contract_name>_report.md",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -119,15 +119,16 @@ async def _main(contract_path: Path, output_path: Path | None, verbose: bool) ->
     report = state.get("final_report") or "_(no report generated)_"
     pipeline_error = state.get("error")
 
-    if output_path:
-        try:
-            output_path.write_text(report, encoding="utf-8")
-            logger.info("Report written to: %s", output_path)
-        except Exception as exc:
-            logger.error("Failed to write report: %s", exc)
-            return 2
-    else:
-        print(report)
+    if not output_path:
+        output_path = Path("reports/final_outputs") / f"{contract_path.name}_report.md"
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(report, encoding="utf-8")
+        logger.info("Report written to: %s", output_path)
+    except Exception as exc:
+        logger.error("Failed to write report: %s", exc)
+        return 2
 
     if pipeline_error:
         logger.error("Pipeline error: %s", pipeline_error)

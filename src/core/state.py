@@ -23,6 +23,10 @@ class CriticFeedback(TypedDict, total=False):
     reason: str
     context_quality_score: float
     context_quality_status: ContextQualityStatus
+    rejected_finding_indices: list[int]
+    findings_pruned: int
+    admissibility_rejected_indices: list[int]
+    admissibility_reason: str
 
 
 class AuditState(TypedDict):

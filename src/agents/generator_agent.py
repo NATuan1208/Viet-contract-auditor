@@ -1,11 +1,12 @@
-"""Generator Agent — formats audit findings into a Vietnamese Markdown report.
+"""Generator Agent — produce final Vietnamese legal audit report.
 
 Inputs:  AuditState.audit_findings, AuditState.contract_domain, AuditState.confidence
 Outputs: AuditState.final_report
 
-Two paths:
-    - confidence >= 0.3: configured LLM call with GENERATOR_SYSTEM_PROMPT
-    - confidence < 0.3: pure template formatter (no LLM call)
+Primary path:
+    - LLM-first generation using GENERATOR_SYSTEM_PROMPT when model config is available.
+Fallback path:
+    - deterministic template formatter when LLM is unavailable or call fails.
 """
 
 from __future__ import annotations
@@ -22,12 +23,22 @@ from core.state import AuditState
 
 logger = logging.getLogger(__name__)
 
-_LLM_SETTINGS = get_llm_settings()
-_MODEL = _LLM_SETTINGS.model
-_llm_client = AsyncOpenAI(
-    api_key=_LLM_SETTINGS.api_key,
-    base_url=_LLM_SETTINGS.base_url,
-)
+
+def _init_llm_client() -> tuple[str | None, AsyncOpenAI | None]:
+    try:
+        llm_settings = get_llm_settings()
+    except Exception as exc:
+        logger.warning("generator_agent: LLM disabled, fallback to template only: %s", exc)
+        return None, None
+
+    client = AsyncOpenAI(
+        api_key=llm_settings.api_key,
+        base_url=llm_settings.base_url,
+    )
+    return llm_settings.model, client
+
+
+_MODEL, _llm_client = _init_llm_client()
 
 
 def _template_report(state: AuditState) -> str:
@@ -55,15 +66,11 @@ def _template_report(state: AuditState) -> str:
     if error:
         lines.append(f"**Lỗi pipeline:** {error}")
     elif not findings:
-        lines.append(
-            "Không phát hiện vi phạm nào. "
-            "_(Lưu ý: đang chạy ở chế độ STUB — cần OPENAI_API_KEY để phân tích thực sự)_"
-        )
+        lines.append("Không phát hiện vi phạm nào trong lần chạy hiện tại.")
     else:
-        stub_note = " _(STUB — cần OPENAI_API_KEY)_" if confidence == 0.0 else ""
         lines.append(
             f"Đã kiểm tra **{len(chunks)}** điều khoản, "
-            f"phát hiện **{len(findings)}** mục cần xem xét{stub_note}."
+            f"phát hiện **{len(findings)}** mục cần xem xét."
         )
         if skipped_clauses:
             lines.append(f"Đã bỏ qua **{len(skipped_clauses)}** điều khoản rủi ro thấp.")
@@ -123,8 +130,7 @@ def _template_report(state: AuditState) -> str:
         "",
         "## Khuyến nghị chung",
         "",
-        "_(Xem chi tiết từng vi phạm ở trên. "
-        "Cần OPENAI_API_KEY để có khuyến nghị tổng hợp từ AI.)_",
+        "Ưu tiên xử lý các vi phạm ảnh hưởng trực tiếp tới quyền lợi và nghĩa vụ cốt lõi.",
         "",
         "---",
         f"*Lĩnh vực: **{domain}** | Điểm tin cậy: {confidence:.2f} | "
@@ -136,10 +142,23 @@ def _template_report(state: AuditState) -> str:
     return "\n".join(lines)
 
 
+def _build_generator_payload(state: AuditState) -> str:
+    findings = state.get("audit_findings", [])
+    payload = {
+        "findings": findings,
+        "confidence": state.get("confidence", 0.0),
+        "context_quality": state.get("context_quality", "poor"),
+        "context_quality_score": state.get("context_quality_score", 0.0),
+        "error_type": state.get("error_type", "low_confidence"),
+        "skipped_clauses": state.get("skipped_clauses", []),
+        "critic_feedback": state.get("critic_feedback", {}),
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 async def generator_node(state: AuditState) -> dict:
     """LangGraph node: format audit findings into a Vietnamese Markdown report."""
     confidence = state.get("confidence", 0.0)
-    findings = state.get("audit_findings", [])
     domain = state.get("contract_domain", "")
     error = state.get("error")
 
@@ -150,7 +169,9 @@ async def generator_node(state: AuditState) -> dict:
         else "Không phát hiện điều khoản phủ định hay ngoại lệ pháp lý."
     )
 
-    if confidence >= 0.3 and findings and not error:
+    llm_ready = bool(_MODEL and _llm_client)
+
+    if llm_ready and not error:
         try:
             response = await _llm_client.chat.completions.create(
                 model=_MODEL,
@@ -159,16 +180,20 @@ async def generator_node(state: AuditState) -> dict:
                     "content": GENERATOR_SYSTEM_PROMPT.format(
                         domain=domain,
                         negations=negations_str,
-                        findings_json=json.dumps(findings, ensure_ascii=False, indent=2),
+                        findings_json=_build_generator_payload(state),
                     ),
                 }],
+                temperature=0.2,
             )
-            report = response.choices[0].message.content
-            logger.info("generator_agent: LLM report generated (%d chars)", len(report))
-            return {"final_report": report}
+            report = (response.choices[0].message.content or "").strip()
+            if report:
+                logger.info("generator_agent: LLM report generated (%d chars)", len(report))
+                return {"final_report": report}
+            logger.warning("generator_agent: LLM returned empty report, fallback to template")
         except Exception as exc:
             logger.error("generator_agent: LLM call failed: %s", exc)
-            # fall through to template
+    elif not llm_ready:
+        logger.warning("generator_agent: LLM not configured, fallback to template")
 
     logger.warning(
         "generator_agent: using template formatter (confidence=%.2f)", confidence

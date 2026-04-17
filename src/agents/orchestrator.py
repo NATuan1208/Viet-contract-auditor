@@ -78,6 +78,8 @@ def route_after_critic(state: AuditState) -> str:
     confidence = state.get("confidence", 0.0)
     context_quality = state.get("context_quality", "poor")
     context_quality_score = state.get("context_quality_score", 0.0)
+    critic_feedback = state.get("critic_feedback", {})
+    pruned = int(critic_feedback.get("findings_pruned", 0) or 0)
 
     if retry_count >= MAX_RETRY:
         logger.info(
@@ -100,13 +102,14 @@ def route_after_critic(state: AuditState) -> str:
 
     if error_type == "reasoning":
         logger.info(
-            "route_after_critic: audit (confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d)",
+            "route_after_critic: finalize reasoning guardrail (pruned=%d, confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d)",
+            pruned,
             confidence,
             context_quality,
             context_quality_score,
             retry_count,
         )
-        return "to_audit"
+        return "finalize"
 
     logger.info(
         "route_after_critic: finalize (error_type=%s, confidence=%.2f, context_quality=%s, quality_score=%.2f, retry=%d)",

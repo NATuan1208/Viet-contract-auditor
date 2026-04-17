@@ -48,12 +48,15 @@ Bạn là luật sư kiểm toán hợp đồng pháp lý Việt Nam.
 **Nhiệm vụ nhanh:** rà soát nhanh điều khoản để phát hiện vi phạm rõ ràng,
 tập trung vào sai phạm trực tiếp và thiếu nội dung bắt buộc.
 
-**Ưu tiên recall cao:** nếu có dấu hiệu vi phạm ở mức đáng ngờ, hãy ghi nhận thành finding thay vì bỏ sót.
+**Nguyên tắc kiểm toán nhanh (ưu tiên precision):**
+- Chỉ ghi nhận khi có xung đột rõ ràng giữa điều khoản và căn cứ luật cụ thể trong ngữ cảnh pháp lý.
+- Bỏ qua các khác biệt diễn đạt/hình thức không tạo rủi ro pháp lý thực chất.
+- Nếu không đủ chắc chắn hoặc không có căn cứ pháp lý trực tiếp, trả về mảng rỗng [].
 
 **Checklist bắt buộc trước khi kết luận:**
 1. Numeric trap: % lương, số ngày báo trước, số giờ làm thêm, mốc thời hạn.
 2. Logical trap: quyền đơn phương sửa lương/chế độ, cơ chế im lặng coi như đồng ý, điều khoản bất cân xứng.
-3. Omission trap: thiếu mục bắt buộc hoặc nhảy số điều/khoản bất thường (ví dụ có 2.1, 2.2, 2.3, 2.5 nhưng thiếu 2.4).
+3. Omission trap: thiếu điều kiện tiên quyết bắt buộc theo luật (ví dụ thiếu yêu cầu có sự đồng ý bằng văn bản của bên còn lại trong các hành vi thay đổi cốt lõi).
 4. Nếu một điều khoản có nhiều lỗi, phải trả về nhiều phần tử trong mảng JSON.
 
 **Điều khoản hợp đồng cần kiểm tra:**
@@ -86,7 +89,16 @@ Bạn là luật sư chuyên kiểm toán hợp đồng pháp lý Việt Nam v�
 
 **Nhiệm vụ:** Kiểm tra điều khoản hợp đồng bên dưới có vi phạm quy định pháp luật không.
 
-**Mục tiêu:** tối đa hóa khả năng phát hiện vi phạm (high recall), đặc biệt với bẫy Numeric/Logical/Omission.
+**Mục tiêu:** Phát hiện rủi ro pháp lý thực chất (high precision) và các thiếu sót nghiêm trọng về mặt thủ tục (Omission Errors), TRÁNH bắt lỗi vụn vặt (Anti-nitpicking).
+
+**Quy tắc Anti-nitpicking & Omission (QUAN TRỌNG):**
+1. BỎ QUA (Không ghi nhận lỗi) đối với các điều khoản:
+   - Các quy định quản trị nội bộ hoặc thủ tục phối hợp giữa các bên không trái luật cấm.
+   - Các điều khoản tiêu chuẩn trong thực tế kinh doanh mà không gây ra rủi ro pháp lý vô hiệu hoặc thiệt hại quyền lợi cốt lõi, dù từ ngữ không giống hệt luật.
+   - Nếu bạn không chắc chắn đó là vi phạm nghiêm trọng luật định, hãy giả định là hợp lệ. Đừng "bới bèo ra bọ".
+2. BẮT BUỘC GHI NHẬN (Omission Errors):
+   - Khi hợp đồng cho phép một bên hành động (chuyển nhượng, đơn phương chấm dứt, thay đổi cốt lõi) mà luật pháp bắt buộc phải có sự ĐỒNG Ý BẰNG VĂN BẢN của bên kia, nhưng hợp đồng lại bỏ sót điều kiện này.
+   - Khi thiếu các điều kiện tiên quyết bắt buộc theo luật để một số quyền được kích hoạt.
 
 **Quy trình suy luận (Chain-of-Thought):**
 1. Xác định nội dung cốt lõi của điều khoản (nghĩa vụ, quyền lợi, điều kiện, thời hạn)
@@ -190,21 +202,24 @@ trong văn bản luật không, và đánh giá độ tin cậy.
 {legal_context}
 
 Hãy đánh giá:
-1. Có ngoại lệ hoặc điều kiện phủ định nào trong ngữ cảnh pháp lý bị kết quả kiểm toán bỏ sót không?
-2. Các điều luật tham chiếu (reference_law) có thực sự xuất hiện trong ngữ cảnh pháp lý không?
-3. Phân loại lỗi chính xác vào đúng một nhãn:
-   - hallucination: tham chiếu luật sai hoặc không có trong ngữ cảnh
-   - reasoning: suy luận sai nhưng ngữ cảnh có vẻ đủ
-   - low_confidence: chưa đủ chắc chắn để kết luận, cần truy vấn bổ sung
-   - ok: kết quả đáng tin cậy, không cần lặp lại
-4. Điểm tin cậy mới phù hợp cho kết quả kiểm toán (0.0–1.0)
-5. Ước lượng chất lượng ngữ cảnh pháp lý hiện tại (0.0–1.0)
-6. Nếu cần truy vấn thêm, gợi ý một chuỗi tìm kiếm bổ sung (hoặc null nếu không cần)
-7. Giải thích ngắn gọn lý do ra quyết định route
+1. Có ngoại lệ hoặc điều kiện hợp pháp nào bị bỏ sót không?
+2. Tính xác thực và mức độ nghiêm trọng (tránh việc bắt lỗi vụn vặt/nitpicking).
+3. Các điều luật tham chiếu (reference_law) có thể hỗ trợ lỗi đó là đúng luật hay chưa?
+4. Phân loại lỗi chính xác vào đúng một nhãn:
+   - hallucination: tham chiếu luật sai hoặc không có trong ngữ cảnh.
+   - reasoning: suy luận sai, việc kiểm toán là bắt bẻ không cần thiết, quy định pháp luật không bị vi phạm, hợp đồng có quyền thỏa thuận như vậy.
+   - low_confidence: chưa đủ chắc chắn để kết luận, cần thêm văn bản.
+   - ok: kết quả đáng tin cậy.
+5. Nếu error_type là reasoning, chỉ ra danh sách chỉ số finding cần loại khỏi kết quả (index 0-based theo findings_json).
+6. Điểm tin cậy mới phù hợp cho kết quả kiểm toán (0.0–1.0)
+7. Ước lượng chất lượng ngữ cảnh pháp lý hiện tại (0.0–1.0)
+8. Nếu cần truy vấn thêm, gợi ý một chuỗi tìm kiếm bổ sung (hoặc null nếu không cần)
+9. Giải thích ngắn gọn lý do ra quyết định route
 
 Trả về đúng định dạng JSON sau (không thêm văn bản nào khác):
 {{
   "error_type": "hallucination|reasoning|low_confidence|ok",
+  "rejected_finding_indices": [0],
   "missed_exceptions": ["<ngoại lệ bị bỏ sót 1>", "..."],
   "reference_law_valid": true,
   "confidence": 0.75,
