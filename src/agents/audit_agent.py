@@ -183,6 +183,8 @@ def _finding_signature(finding: dict) -> str:
         return "logical_complaint_waiver"
     if "hệ thống nhượng quyền" in combined and "01 năm" in combined:
         return "omission_one_year_prerequisite"
+    if "tiền lương làm thêm giờ" in combined and "100" in combined and "mọi trường hợp" in combined:
+        return "numeric_overtime_100pct_blanket"
 
     violation_key = _normalize_space(str(finding.get("violation", ""))).lower()[:140]
     return f"{clause_idx}:{violation_key}"
@@ -265,6 +267,30 @@ def _build_rule_based_findings(state: AuditState, chunks: list[str]) -> list[dic
                 "suggested_fix": (
                     "Sửa điều khoản theo hướng bên nhận quyền vẫn có quyền khiếu nại, yêu cầu "
                     "khắc phục hoặc bồi thường khi chất lượng hàng hóa, thiết bị, nguyên liệu không đạt cam kết."
+                ),
+                "clause_index": idx,
+                "source": "deterministic_rule",
+            })
+            break
+
+    # Numeric trap: overtime pay blanket-capped at 100% (legal minimum is 150/200/300%).
+    for idx, chunk_lower in enumerate(lowered_chunks):
+        has_overtime = bool(re.search(r"tiền\s*lương\s*làm\s*thêm\s*giờ", chunk_lower))
+        has_100_blanket = bool(re.search(r"100\s*%.*trong\s*mọi\s*trường\s*hợp", chunk_lower))
+        if has_overtime and has_100_blanket:
+            clause_snippet = _extract_subclause_snippet(contract_text, "100%", chunks[idx])
+            findings.append({
+                "clause": clause_snippet,
+                "violation": (
+                    "Điều khoản quy định tiền lương làm thêm giờ bằng 100% tiền lương giờ thực trả "
+                    "trong mọi trường hợp, thấp hơn mức tối thiểu pháp luật: 150% (ngày thường), "
+                    "200% (ngày nghỉ hàng tuần), 300% (ngày nghỉ lễ, Tết)."
+                ),
+                "reference_law": "Điều 98, Bộ luật Lao động 2019 (Luật 45/2019/QH14)",
+                "suggested_fix": (
+                    "Sửa thành: tiền lương làm thêm giờ vào ngày thường ít nhất bằng 150%, "
+                    "ngày nghỉ hàng tuần ít nhất bằng 200%, ngày nghỉ lễ/Tết ít nhất bằng 300% "
+                    "tiền lương giờ thực trả theo Điều 98 Bộ luật Lao động 2019."
                 ),
                 "clause_index": idx,
                 "source": "deterministic_rule",

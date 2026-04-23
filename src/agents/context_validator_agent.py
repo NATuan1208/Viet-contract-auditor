@@ -96,9 +96,11 @@ async def context_validator_node(state: AuditState) -> dict:
         ref_covered = len(clauses_with_refs & retrieved_set)
         ref_coverage = ref_covered / max(1, len(clauses_with_refs))
 
+    # avg_relevance is the dominant factor (0.5): high coverage with irrelevant
+    # context should still score poorly. ref_coverage is a secondary signal.
     context_quality_score = (
-        (coverage_ratio * 0.5)
-        + (avg_relevance * 0.3)
+        (coverage_ratio * 0.3)
+        + (avg_relevance * 0.5)
         + (ref_coverage * 0.2)
     )
     context_quality_score = max(0.0, min(1.0, context_quality_score))

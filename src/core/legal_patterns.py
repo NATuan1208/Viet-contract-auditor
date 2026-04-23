@@ -73,6 +73,11 @@ DOMAIN_KEYWORDS: dict[str, list[str]] = {
         "quyền sử dụng đất",
         "bất động sản",
         "hợp đồng dân dụng",
+        "mua bán nhà ở",
+        "căn hộ",
+        "chung cư",
+        "sở hữu chung",
+        "nhà ở thương mại",
     ],
 }
 

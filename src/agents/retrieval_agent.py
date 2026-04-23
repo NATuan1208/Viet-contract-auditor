@@ -30,6 +30,15 @@ from core.state import AuditState
 logger = logging.getLogger(__name__)
 
 _RETRY_DELAYS = (2.0, 4.0, 8.0)  # exponential backoff for any query failure
+
+# Prepend the governing law name to clause queries so the KG/vector search
+# biases toward the correct legal domain when the corpus contains multiple laws.
+_DOMAIN_LAW_CONTEXT: dict[str, str] = {
+    "Lao động": "Bộ luật Lao động",
+    "Thương mại": "Luật Thương mại",
+    "Dân sự": "Bộ luật Dân sự",
+    "Doanh nghiệp": "Luật Doanh nghiệp",
+}
 _RETRIEVE_LOW_RISK_CLAUSES = os.getenv("RETRIEVE_LOW_RISK_CLAUSES", "1").strip().lower() not in {
     "0",
     "false",
@@ -91,7 +100,11 @@ async def retrieval_node(state: AuditState) -> dict:
             return await _query_with_retry(text)
 
     # --- Clause queries (one per medium/high segmented chunk) ---
-    clause_queries: list[tuple[int, str]] = [(i, chunks[i]) for i in active_clause_indices]
+    _law_ctx = _DOMAIN_LAW_CONTEXT.get(domain, domain)
+    clause_queries: list[tuple[int, str]] = [
+        (i, f"{_law_ctx}: {chunks[i]}" if _law_ctx else chunks[i])
+        for i in active_clause_indices
+    ]
 
     # --- Xref-expansion queries (one per unique "Điều X" reference) ---
     xref_queries: list[tuple[str, int | None]] = []

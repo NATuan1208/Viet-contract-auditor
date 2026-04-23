@@ -474,7 +474,14 @@ async def critic_node(state: AuditState) -> dict:
         critic_feedback["admissibility_rejected_indices"] = admissibility_rejected
         critic_feedback["admissibility_reason"] = admissibility_reason
         if error_type == "ok":
-            error_type = "reasoning"
+            # If the validator already flagged low retrieval relevance, the rejections
+            # are likely an artefact of bad context rather than hallucinated references.
+            # Route back to retrieval instead of finalising prematurely.
+            _low_relevance = any(
+                "low relevance score" in str(err).lower()
+                for err in context_validation_errors
+            )
+            error_type = "low_confidence" if _low_relevance else "reasoning"
 
     if rejected_indices:
         reject_set = set(rejected_indices)

@@ -74,10 +74,19 @@ def _extract_violation_sections(report_md: str) -> list[str]:
     return sections
 
 
+def _article_from_chunk(chunk_text: str) -> str | None:
+    """Extract 'Điều N' header from a chunk string, or None if absent (e.g. preamble)."""
+    m = re.search(r"(?:Điều|ĐIỀU)\s+(\d+)", chunk_text)
+    if m:
+        return f"Điều {m.group(1)}"
+    return None
+
+
 def _build_prediction_texts(state: dict, report_md: str) -> list[str]:
     """Prefer raw audit findings over report sections for less paraphrase noise."""
     findings = state.get("audit_findings", [])
     if isinstance(findings, list) and findings:
+        chunks: list[str] = state.get("chunks", [])
         preds: list[str] = []
         for f in findings:
             clause = str(f.get("clause", ""))
@@ -87,7 +96,11 @@ def _build_prediction_texts(state: dict, report_md: str) -> list[str]:
             clause_idx = f.get("clause_index")
             loc_hint = ""
             if isinstance(clause_idx, int):
-                loc_hint = f"Điều {clause_idx + 1}"
+                # Read actual article header from the chunk rather than computing
+                # clause_index+1, which is wrong when a preamble chunk is at index 0.
+                chunk_text = chunks[clause_idx] if clause_idx < len(chunks) else ""
+                article = _article_from_chunk(chunk_text)
+                loc_hint = article if article else f"Điều {clause_idx + 1}"
             preds.append(" ".join(x for x in [loc_hint, clause, violation, ref, fix] if x).strip())
         if preds:
             return preds
