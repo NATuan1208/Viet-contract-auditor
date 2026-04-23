@@ -169,13 +169,19 @@ def _location_score(gt_location: str, pred_text: str) -> float:
     if gt_lower in pred_lower:
         return 1.0
 
-    gt_top, gt_detail = _extract_location_tokens(gt_lower)
+    # Collect ALL article numbers from GT (handles compound locations like
+    # "Điều 1 khoản 7 và Điều 2 khoản 1(b)").
+    gt_articles = set(re.findall(r"điều\s*(\d+(?:\.\d+)?)", gt_lower))
     pred_top, pred_detail = _extract_location_tokens(pred_lower)
 
-    if gt_detail and pred_detail and gt_detail == pred_detail:
-        return 0.95
-    if gt_top and pred_top and gt_top == pred_top:
-        return 0.55
+    if pred_detail:
+        pred_num = pred_detail.replace("điều ", "")
+        if pred_num in gt_articles:
+            return 0.95
+    if pred_top:
+        pred_num = pred_top.replace("điều ", "")
+        if pred_num in gt_articles:
+            return 0.55
     return 0.0
 
 
