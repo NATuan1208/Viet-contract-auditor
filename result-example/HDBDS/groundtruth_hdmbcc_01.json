@@ -1,0 +1,32 @@
+{
+  "contract_metadata": {
+    "type": "Hợp đồng mua bán căn hộ chung cư",
+    "source_file": "hop-dong-mua-ban-can-ho-chung-cu.docx"
+  },
+  "perturbed_contract_text": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM\nĐộc lập - Tự do - Hạnh phúc\n---------------\n\n…, ngày... tháng... năm ….\n\nHỢP ĐỒNG MUA BÁN NHÀ Ở\n\nSố: .../.....\n\n[Các phần mở đầu giữ nguyên]\n\nĐiều 1. Giải thích từ ngữ\n...\n7. “Diện tích sử dụng căn hộ” là diện tích sàn xây dựng của căn hộ bao gồm cả phần diện tích ban công và lô gia gắn liền với căn hộ đó.\n...\n\nĐiều 2. Đặc điểm của căn hộ mua bán\n...\nb) Diện tích sử dụng căn hộ là: …………m2.\n(Hai bên thống nhất rằng diện tích này là căn cứ để tính tiền mua căn hộ, không yêu cầu xác định lại theo kích thước thông thủy khi cấp Giấy chứng nhận.)\n...\n\nĐiều 11. Phần sở hữu riêng, phần sở hữu chung và việc sử dụng căn hộ trong nhà chung cư\n\n1. Bên mua được quyền sở hữu riêng đối với diện tích căn hộ đã mua...\n\n2. Các diện tích và trang thiết bị kỹ thuật thuộc quyền sở hữu riêng của Bên bán bao gồm: ...; phần sân thượng của tòa nhà chung cư thuộc quyền sở hữu riêng của Chủ đầu tư và không thuộc phần sở hữu chung của các chủ sở hữu căn hộ.\n\n3. Các phần diện tích và thiết bị thuộc sở hữu chung, sử dụng chung của các chủ sở hữu trong nhà chung cư bao gồm: ... (không bao gồm phần sân thượng nêu tại khoản 2 Điều này).\n\n...\n\n5. Hai bên nhất trí thỏa thuận mức kinh phí quản lý vận hành nhà chung cư như sau:\n\na) Tính từ thời điểm Bên bán bàn giao căn hộ cho Bên mua theo quy định tại Điều 8 của hợp đồng này đến thời điểm Ban quản trị nhà chung cư được thành lập và ký hợp đồng quản lý, vận hành nhà ở với đơn vị quản lý vận hành, thì kinh phí quản lý vận hành là: ………… đồng/m2/tháng.\n\nMức kinh phí này có thể được Ban Quản lý vận hành điều chỉnh tăng theo từng thời kỳ tùy thuộc vào chi phí thực tế mà không cần có sự chấp thuận của Bên mua.\n\nb) Sau khi Ban quản trị nhà chung cư được thành lập thì danh mục các công việc, dịch vụ, mức kinh phí và việc đóng phí quản lý vận hành nhà chung cư sẽ do Ban quản lý vận hành quyết định trên cơ sở tình hình thực tế.\n\n...\n\n[Các điều khoản còn lại giữ nguyên nội dung gốc]\n",
+  "vulnerabilities": [
+    {
+      "type": "Omission",
+      "location": "Điều 1 khoản 7 và Điều 2 khoản 1(b)",
+      "description": "Không ghi rõ diện tích sử dụng theo kích thước thông thủy, đồng thời loại bỏ cơ chế xác định lại diện tích thông thủy khi cấp Giấy chứng nhận.",
+      "reasoning": "Theo Luật Nhà ở 2023, diện tích căn hộ phải được xác định theo kích thước thông thủy để đảm bảo quyền lợi người mua. Việc bỏ nội dung này khiến căn cứ tính diện tích không rõ ràng.",
+      "legal_risk": "Người mua có thể bị thiệt hại về diện tích thực tế, khó khiếu nại hoặc yêu cầu điều chỉnh giá trị hợp đồng."
+    },
+    {
+      "type": "Logical",
+      "location": "Điều 11 khoản 2 và 3",
+      "description": "Quy định phần sân thượng thuộc sở hữu riêng của Chủ đầu tư thay vì là phần sở hữu chung.",
+      "reasoning": "Theo quy định pháp luật, sân thượng thường là phần sở hữu chung của nhà chung cư. Quy định này trái với bản chất pháp lý của tài sản chung.",
+      "legal_risk": "Gây tranh chấp quyền sử dụng, hạn chế quyền lợi hợp pháp của cư dân và có thể bị tuyên vô hiệu điều khoản."
+    },
+    {
+      "type": "Numeric",
+      "location": "Điều 11 khoản 5",
+      "description": "Cho phép phí quản lý vận hành tăng tùy ý theo quyết định của Ban quản lý mà không có giới hạn hoặc cơ chế kiểm soát.",
+      "reasoning": "Pháp luật yêu cầu mức phí phải minh bạch và được thông qua bởi hội nghị nhà chung cư. Điều khoản này trao quyền tăng phí không giới hạn.",
+      "legal_risk": "Người mua có thể bị áp đặt chi phí vô lý, phát sinh tranh chấp và điều khoản có thể bị vô hiệu."
+    }
+  ],
+  "reasoning": "Các bẫy được gài theo hướng giảm quyền lợi của bên mua: (i) loại bỏ tiêu chuẩn thông thủy làm mơ hồ diện tích; (ii) chuyển đổi sai bản chất sở hữu chung thành sở hữu riêng; (iii) trao quyền tăng phí không giới hạn cho bên quản lý. Các thay đổi được chèn khéo léo vào các điều khoản trọng yếu để khó phát hiện.",
+  "severity": "High"
+}
