@@ -170,17 +170,22 @@ def _location_score(gt_location: str, pred_text: str) -> float:
         return 1.0
 
     # Collect ALL article numbers from GT (handles compound locations like
-    # "Điều 1 khoản 7 và Điều 2 khoản 1(b)").
+    # "Điều 1 khoản 7 và Điều 2 khoản 1(b)" or sub-clause refs like "Điều 3.1(ix)").
     gt_articles = set(re.findall(r"điều\s*(\d+(?:\.\d+)?)", gt_lower))
+    # Also include top-level article numbers (e.g. "3" from "3.1") so that a
+    # prediction at Điều 3 can match a GT location at Điều 3.1(ix).
+    gt_article_tops = {a.split(".")[0] for a in gt_articles}
     pred_top, pred_detail = _extract_location_tokens(pred_lower)
 
     if pred_detail:
         pred_num = pred_detail.replace("điều ", "")
         if pred_num in gt_articles:
             return 0.95
+        if pred_num in gt_article_tops:
+            return 0.75
     if pred_top:
         pred_num = pred_top.replace("điều ", "")
-        if pred_num in gt_articles:
+        if pred_num in gt_articles or pred_num in gt_article_tops:
             return 0.55
     return 0.0
 
