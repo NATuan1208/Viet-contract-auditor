@@ -473,10 +473,11 @@ async def critic_node(state: AuditState) -> dict:
         rejected_indices = sorted(set(rejected_indices) | set(admissibility_rejected))
         critic_feedback["admissibility_rejected_indices"] = admissibility_rejected
         critic_feedback["admissibility_reason"] = admissibility_reason
-        if error_type == "ok":
+        if error_type in {"ok", "reasoning"}:
             # If the validator already flagged low retrieval relevance, the rejections
             # are likely an artefact of bad context rather than hallucinated references.
             # Route back to retrieval instead of finalising prematurely.
+            # Handles both: LLM critic returns "ok" (common) or "reasoning" directly.
             _low_relevance = any(
                 "low relevance score" in str(err).lower()
                 for err in context_validation_errors
@@ -488,9 +489,17 @@ async def critic_node(state: AuditState) -> dict:
         low_relevance = any(
             "low relevance score" in str(err).lower() for err in context_validation_errors
         )
+        # Deterministic-rule findings are high-confidence and exempt from admissibility,
+        # so exclude them from the safeguard threshold to avoid defeating the safeguard.
+        non_det_count = sum(1 for f in findings if f.get("source") != "deterministic_rule")
         # Keep findings when retrieval relevance is poor; prefer lowering confidence
         # over erasing all potential legal issues.
-        if low_relevance and len(reject_set) >= len(findings) and error_type != "hallucination":
+        if (
+            low_relevance
+            and non_det_count > 0
+            and len(reject_set) >= non_det_count
+            and error_type != "hallucination"
+        ):
             critic_feedback["prune_safeguard"] = "kept_all_due_low_relevance"
             reject_set = set()
 
