@@ -45,7 +45,7 @@ def _port_open(port: int) -> bool:
     finally: s.close()
 
 def storage_offline() -> list[str]:
-    return [n for n, p in [("Neo4j", 7687), ("Qdrant", 6333), ("PostgreSQL", 55432)] if not _port_open(p)]
+    return [n for n, p in [("Neo4j", 7687), ("Qdrant", 6333), ("PostgreSQL", 5433)] if not _port_open(p)]
 
 def has_llm_key() -> bool:
     return bool(os.getenv("OPENAI_API_KEY") or os.getenv("CEREBRAS_API_KEY"))

@@ -41,7 +41,7 @@ services:
     container_name: viet-contract-postgres
     restart: unless-stopped
     ports:
-      - "55432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-viet_contract}
       POSTGRES_USER: ${POSTGRES_USER:-rag}

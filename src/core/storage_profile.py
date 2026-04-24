@@ -20,7 +20,7 @@ def get_profile() -> Profile:
 def required_ports() -> list[tuple[str, int]]:
     if get_profile() == "demo":
         return []
-    return [("Neo4j", 7687), ("Qdrant", 6333), ("PostgreSQL", 55432)]
+    return [("Neo4j", 7687), ("Qdrant", 6333), ("PostgreSQL", 5433)]
 
 
 def demo_index_ready() -> bool:
