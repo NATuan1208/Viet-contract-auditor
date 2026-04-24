@@ -10,7 +10,13 @@ CUSTOM_CSS = """
   --border:rgba(0,0,0,.07); --muted:#6B7280; --surface:#F9FAFB;
 }
 
-.block-container { padding-top: 1.5rem !important; }
+/* Remove Streamlit chrome — deploy button, hamburger, footer */
+#MainMenu { visibility: hidden; }
+header { visibility: hidden; height: 0 !important; }
+footer { visibility: hidden; }
+div[data-testid="stToolbar"] { display: none !important; }
+
+.block-container { padding-top: 1.5rem !important; padding-bottom: 2rem !important; }
 
 .finding-card {
   border: 1px solid var(--border); border-radius: 12px; overflow: hidden;

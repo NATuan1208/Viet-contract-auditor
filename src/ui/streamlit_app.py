@@ -171,8 +171,12 @@ def main() -> None:
         ss.findings = parse_findings(result.report_md)
         ss.domain, ss.confidence = parse_meta(result.report_md)
         ss.violation_count = len(ss.findings)
-        if result.returncode != 0 and not result.report_md.strip():
-            st.error("Pipeline lỗi — xem tab Log pipeline bên dưới.")
+        if result.returncode != 0:
+            tail = "\n".join(result.logs[-40:])
+            pg_hint = " Kiểm tra PostgreSQL đang chạy: `docker compose up -d`" if "postgresql" in tail.lower() or "asyncpg" in tail.lower() or "connection" in tail.lower() else ""
+            st.error(f"Pipeline lỗi (exit {result.returncode}).{pg_hint}")
+            with st.expander("Log lỗi chi tiết", expanded=not result.report_md.strip()):
+                st.code(tail, language=None)
 
     if st.session_state.report:
         st.markdown("---")
