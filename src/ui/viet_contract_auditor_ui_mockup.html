@@ -1,0 +1,224 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.sidebar{background:var(--color-background-secondary);border-right:0.5px solid var(--color-border-tertiary);padding:20px 16px;width:200px;min-height:600px;display:flex;flex-direction:column;gap:16px}
+.logo-block{display:flex;flex-direction:column;gap:4px}
+.logo-badge{background:#1E6B4A;color:#fff;font-size:11px;font-weight:500;padding:3px 8px;border-radius:4px;width:fit-content}
+.logo-title{font-size:15px;font-weight:500;color:var(--color-text-primary);line-height:1.3}
+.logo-sub{font-size:11px;color:var(--color-text-tertiary)}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--border-radius-md);font-size:13px;color:var(--color-text-secondary);cursor:pointer}
+.nav-item.active{background:var(--color-background-primary);color:var(--color-text-primary);border:0.5px solid var(--color-border-tertiary);font-weight:500}
+.nav-dot{width:6px;height:6px;border-radius:50%}
+.dot-green{background:#1E6B4A}
+.dot-gray{background:var(--color-border-secondary)}
+.main{flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.header-row{display:flex;align-items:center;justify-content:space-between}
+.page-title{font-size:18px;font-weight:500;color:var(--color-text-primary)}
+.status-pill{font-size:11px;padding:3px 10px;border-radius:12px;font-weight:500}
+.pill-success{background:#EAF3DE;color:#27500A}
+.pill-warning{background:#FAEEDA;color:#633806}
+.pill-error{background:#FCEBEB;color:#791F1F}
+.upload-zone{border:0.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:24px;display:flex;flex-direction:column;align-items:center;gap:8px;background:var(--color-background-secondary)}
+.upload-icon{width:32px;height:32px;border-radius:var(--border-radius-md);background:#E1F5EE;display:flex;align-items:center;justify-content:center}
+.upload-icon svg{width:16px;height:16px}
+.upload-title{font-size:14px;font-weight:500;color:var(--color-text-primary)}
+.upload-sub{font-size:12px;color:var(--color-text-tertiary)}
+.file-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);font-size:13px;color:var(--color-text-primary);width:100%}
+.file-icon{width:20px;height:20px;border-radius:4px;background:#EAF3DE;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.file-name{flex:1;font-weight:500}
+.file-size{font-size:11px;color:var(--color-text-tertiary)}
+.btn-primary{background:#1E6B4A;color:#fff;border:none;border-radius:var(--border-radius-md);padding:9px 18px;font-size:13px;font-weight:500;cursor:pointer;width:100%}
+.section-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.5px}
+.metrics-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.metric-card{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px}
+.metric-label{font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px}
+.metric-value{font-size:20px;font-weight:500;color:var(--color-text-primary)}
+.metric-sub{font-size:11px;color:var(--color-text-secondary);margin-top:2px}
+.progress-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:14px 16px}
+.progress-title{font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:12px}
+.stage-row{display:flex;align-items:center;gap:10px;padding:5px 0}
+.stage-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.stage-done{background:#1E6B4A}
+.stage-active{background:#EF9F27}
+.stage-wait{background:var(--color-border-secondary)}
+.stage-text{font-size:12px}
+.stage-text.done{color:var(--color-text-secondary)}
+.stage-text.active{color:#633806;font-weight:500}
+.stage-text.wait{color:var(--color-text-tertiary)}
+.finding-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.finding-header{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:0.5px solid var(--color-border-tertiary)}
+.finding-num{font-size:11px;font-weight:500;color:var(--color-text-tertiary)}
+.severity-badge{font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px}
+.sev-high{background:#FCEBEB;color:#791F1F}
+.sev-med{background:#FAEEDA;color:#633806}
+.sev-low{background:#EAF3DE;color:#27500A}
+.finding-body{padding:12px 14px;display:flex;flex-direction:column;gap:9px}
+.field-row{display:flex;flex-direction:column;gap:2px}
+.field-label{font-size:10px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.4px}
+.field-value{font-size:12px;color:var(--color-text-primary);line-height:1.5}
+.law-chip{display:inline-block;background:#E1F5EE;color:#085041;font-size:10px;font-weight:500;padding:2px 8px;border-radius:10px}
+.fix-value{font-size:12px;color:#085041;line-height:1.5;background:#E1F5EE;padding:6px 10px;border-radius:var(--border-radius-md)}
+.conf-bar-track{height:4px;background:var(--color-border-tertiary);border-radius:2px;flex:1}
+.conf-bar-fill{height:4px;background:#1E6B4A;border-radius:2px;width:82%}
+.conf-row{display:flex;align-items:center;gap:8px}
+.conf-label{font-size:11px;color:var(--color-text-tertiary)}
+.conf-val{font-size:11px;font-weight:500;color:#085041}
+.layout{display:flex;height:620px;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.dl-btn{border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);color:var(--color-text-primary);border-radius:var(--border-radius-md);padding:7px 14px;font-size:12px;cursor:pointer}
+</style>
+
+<h2 class="sr-only">Mockup UI Viet-Contract Auditor — layout mục tiêu gồm sidebar điều hướng, vùng upload, tiến trình pipeline và violation cards</h2>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="logo-block">
+      <span class="logo-badge">v1.0 demo</span>
+      <span class="logo-title">Viet-Contract Auditor</span>
+      <span class="logo-sub">LightRAG + LangGraph</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">
+      <div class="nav-item active"><span class="nav-dot dot-green"></span>Kiểm định hợp đồng</div>
+      <div class="nav-item"><span class="nav-dot dot-gray"></span>Lịch sử</div>
+      <div class="nav-item"><span class="nav-dot dot-gray"></span>Cài đặt</div>
+    </div>
+    <div style="margin-top:auto;border-top:0.5px solid var(--color-border-tertiary);padding-top:12px">
+      <div class="conf-label" style="margin-bottom:6px">Hệ thống</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--color-text-secondary)">Neo4j</span>
+          <span style="font-size:10px;color:#27500A;background:#EAF3DE;padding:1px 6px;border-radius:8px">online</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--color-text-secondary)">Qdrant</span>
+          <span style="font-size:10px;color:#27500A;background:#EAF3DE;padding:1px 6px;border-radius:8px">online</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:11px;color:var(--color-text-secondary)">PostgreSQL</span>
+          <span style="font-size:10px;color:#27500A;background:#EAF3DE;padding:1px 6px;border-radius:8px">online</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="main" style="overflow-y:auto">
+    <div class="header-row">
+      <span class="page-title">Kiểm định hợp đồng</span>
+      <span class="status-pill pill-success">Pipeline sẵn sàng</span>
+    </div>
+
+    <div>
+      <div class="section-label" style="margin-bottom:8px">Tải lên hợp đồng</div>
+      <div class="upload-zone">
+        <div class="upload-icon">
+          <svg viewBox="0 0 16 16" fill="none" stroke="#1E6B4A" stroke-width="1.5"><path d="M8 11V4M5 7l3-3 3 3"/><rect x="2" y="11" width="12" height="3" rx="1"/></svg>
+        </div>
+        <span class="upload-title">Kéo thả hoặc chọn file</span>
+        <span class="upload-sub">PDF, DOCX, TXT — tối đa 50MB</span>
+      </div>
+      <div class="file-chip" style="margin-top:8px">
+        <div class="file-icon">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#1E6B4A" stroke-width="1.5"><rect x="1.5" y="0.5" width="9" height="11" rx="1.5"/><path d="M3.5 4h5M3.5 6h5M3.5 8h3"/></svg>
+        </div>
+        <span class="file-name">hop_dong_lao_dong_2025.docx</span>
+        <span class="file-size">84 KB</span>
+      </div>
+      <button class="btn-primary" style="margin-top:8px">Bắt đầu kiểm định</button>
+    </div>
+
+    <div>
+      <div class="section-label" style="margin-bottom:8px">Tiến trình pipeline</div>
+      <div class="progress-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <span class="progress-title" style="margin-bottom:0">Đang chạy...</span>
+          <span style="font-size:11px;color:var(--color-text-tertiary)">47s</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div class="stage-row"><span class="stage-dot stage-done"></span><span class="stage-text done">Phân loại hợp đồng — lao động</span></div>
+          <div class="stage-row"><span class="stage-dot stage-done"></span><span class="stage-text done">Tiền xử lý văn bản</span></div>
+          <div class="stage-row"><span class="stage-dot stage-done"></span><span class="stage-text done">Truy xuất điều luật</span></div>
+          <div class="stage-row"><span class="stage-dot stage-active"></span><span class="stage-text active">Kiểm định điều khoản...</span></div>
+          <div class="stage-row"><span class="stage-dot stage-wait"></span><span class="stage-text wait">Phản biện và xác minh</span></div>
+          <div class="stage-row"><span class="stage-dot stage-wait"></span><span class="stage-text wait">Tạo báo cáo</span></div>
+        </div>
+        <div class="conf-row" style="margin-top:12px">
+          <span class="conf-label">Tiến độ</span>
+          <div class="conf-bar-track"><div class="conf-bar-fill" style="width:60%"></div></div>
+          <span class="conf-val">60%</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span class="section-label">Kết quả kiểm định</span>
+        <button class="dl-btn">Tải báo cáo .md</button>
+      </div>
+      <div class="metrics-row" style="margin-bottom:12px">
+        <div class="metric-card">
+          <div class="metric-label">Lĩnh vực</div>
+          <div class="metric-value" style="font-size:15px;margin-top:2px">Lao động</div>
+          <div class="metric-sub">Bộ luật lao động 2019</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Điểm tin cậy</div>
+          <div class="metric-value">0.82</div>
+          <div class="conf-row" style="margin-top:4px"><div class="conf-bar-track"><div class="conf-bar-fill" style="width:82%"></div></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Vi phạm phát hiện</div>
+          <div class="metric-value" style="color:#A32D2D">3</div>
+          <div class="metric-sub">2 nghiêm trọng · 1 trung bình</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div class="finding-card">
+          <div class="finding-header">
+            <span class="finding-num">Vi phạm 01</span>
+            <span class="severity-badge sev-high">Nghiêm trọng</span>
+          </div>
+          <div class="finding-body">
+            <div class="field-row">
+              <span class="field-label">Điều khoản</span>
+              <span class="field-value">Người lao động chỉ được nghỉ phép 10 ngày/năm</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Vi phạm</span>
+              <span class="field-value">Thấp hơn mức tối thiểu 12 ngày theo quy định pháp luật</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Căn cứ pháp lý</span>
+              <span class="law-chip">Điều 113, Bộ luật Lao động 2019</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Đề xuất sửa đổi</span>
+              <span class="fix-value">Sửa thành "tối thiểu 12 ngày phép có hưởng lương mỗi năm"</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="finding-card">
+          <div class="finding-header">
+            <span class="finding-num">Vi phạm 02</span>
+            <span class="severity-badge sev-med">Trung bình</span>
+          </div>
+          <div class="finding-body">
+            <div class="field-row">
+              <span class="field-label">Điều khoản</span>
+              <span class="field-value">Không quy định thời gian báo trước khi chấm dứt hợp đồng</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Vi phạm</span>
+              <span class="field-value">Thiếu điều khoản bắt buộc về thời hạn thông báo trước</span>
+            </div>
+            <div class="field-row">
+              <span class="field-label">Căn cứ pháp lý</span>
+              <span class="law-chip">Điều 35, Bộ luật Lao động 2019</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

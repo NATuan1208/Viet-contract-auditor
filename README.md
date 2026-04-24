@@ -1,3 +1,15 @@
+---
+title: Viet Contract Auditor
+emoji: 📄
+colorFrom: green
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+short_description: Vietnamese contract audit with LightRAG + LangGraph
+---
+
 # Viet Contract Auditor
 
 Hệ thống kiểm toán hợp đồng tiếng Việt theo pháp luật hiện hành, dùng LightRAG + LangGraph multi-agent để phát hiện vi phạm, trích dẫn căn cứ luật và đề xuất sửa điều khoản.
@@ -8,7 +20,7 @@ Hệ thống kiểm toán hợp đồng tiếng Việt theo pháp luật hiện 
 - Phase 3: migrate offline LightRAG artifacts sang Neo4j + Qdrant + PostgreSQL (done)
 - Phase 4: LangGraph pipeline Router -> Retrieval -> Audit -> Generator (done)
 - Phase 4B: bổ sung Preprocessor + Critic loop tự hiệu chỉnh, anti-nitpicking guardrails (done)
-- Phase 5: Streamlit UI (next)
+- Phase 5: Streamlit UI — dual-mode (production + HF Spaces demo) (done)
 - Phase 6: evaluator nâng cao LLM-as-judge (pending)
 
 ## 2. Kiến trúc hệ thống
@@ -151,8 +163,31 @@ Thiết lập trong file `.env` (không commit secrets):
 - Chunking luật: regex-based theo `Điều \d+\.`; không dùng character split.
 - Agent runtime phải truy cập storage production, không đọc trực tiếp JSON artifacts trong `lightrag_index`.
 
-## 8. Roadmap gần nhất
+## 8. Chạy Streamlit UI (Phase 5)
 
-1. Triển khai Streamlit UI cho upload hợp đồng, theo dõi state và render report.
-2. Bổ sung evaluator LLM-as-judge ở Phase 6.
-3. Mở rộng bộ groundtruth đa domain để giảm overfitting theo từng case.
+### Local — production profile (full Docker stack)
+
+```bash
+docker compose up -d
+uv run streamlit run src/ui/streamlit_app.py
+# Mở http://localhost:8501
+```
+
+### Local — demo profile (không cần Docker)
+
+```bash
+STORAGE_PROFILE=demo uv run streamlit run src/ui/streamlit_app.py
+```
+
+### Hugging Face Spaces (Docker)
+
+```bash
+docker build -t viet-auditor-demo .
+docker run -p 7860:7860 -e OPENAI_API_KEY=$OPENAI_API_KEY viet-auditor-demo
+# Mở http://localhost:7860
+```
+
+## 9. Roadmap gần nhất
+
+1. Bổ sung evaluator LLM-as-judge ở Phase 6.
+2. Mở rộng bộ groundtruth đa domain để giảm overfitting theo từng case.
