@@ -15,6 +15,16 @@ venv/
 
 # Report outputs (test artifacts, never commit)
 report*.md
+reports/benchmarks/
+reports/final_outputs/*smoke*.md
+reports/final_outputs/hdld_01_test copy_report.md
+reports/final_outputs/hdld_report_lightrag_prod_apply_*.md
+reports/metrics/hdld_01_test copy_*.md
+reports/metrics/hdld_01_test copy_*.json
+
+# Pipeline generated state and crawled artifacts
+data/lakehouse/
+data/pipeline_state/
 
 # IDE
 .vscode/
@@ -30,9 +40,11 @@ Thumbs.db
 # Agent support docs
 CLAUDE.md
 Project_base_knowledge.md
+agent-skills/
 
 # Claude Code local settings (personal overrides, not for sharing)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Scratch / test files
 sample_contract.txt

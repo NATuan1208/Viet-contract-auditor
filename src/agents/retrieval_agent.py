@@ -46,6 +46,20 @@ _RETRIEVE_LOW_RISK_CLAUSES = os.getenv("RETRIEVE_LOW_RISK_CLAUSES", "1").strip()
 }
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning("Invalid integer for %s=%r; using %d", name, raw, default)
+        return default
+
+
+_RETRIEVAL_CONTEXT_MAX_CHARS = max(200, _env_int("LIGHTRAG_CONTEXT_MAX_CHARS", 1000))
+
+
 async def retrieval_node(state: AuditState) -> dict:
     """LangGraph node: retrieve relevant law passages for each contract clause."""
     # Prefer word-tokenised chunks from preprocessor; fall back to raw chunks
@@ -79,7 +93,7 @@ async def retrieval_node(state: AuditState) -> dict:
         for attempt, delay in enumerate(_RETRY_DELAYS, start=1):
             try:
                 result = await query_hybrid(rag, text, top_k=10)
-                return (result or "")[:1000]
+                return (result or "")[:_RETRIEVAL_CONTEXT_MAX_CHARS]
             except Exception as exc:
                 if attempt < len(_RETRY_DELAYS):
                     logger.warning(

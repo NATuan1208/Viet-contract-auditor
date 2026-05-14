@@ -57,11 +57,134 @@ services:
     networks:
       - rag_backend
 
+  minio:
+    image: minio/minio:latest
+    container_name: viet-contract-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secure_pwd}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    networks:
+      - rag_backend
+
+  tika:
+    image: apache/tika:latest-full
+    container_name: viet-contract-tika
+    restart: unless-stopped
+    profiles:
+      - pipeline
+      - ocr
+    ports:
+      - "9998:9998"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9998/version || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - rag_backend
+
+  pipeline-worker:
+    build: .
+    container_name: viet-contract-pipeline-worker
+    restart: unless-stopped
+    profiles:
+      - pipeline
+    command: ["uv", "run", "python", "src/pipeline_scheduler.py", "--interval-hours", "24"]
+    environment:
+      STORAGE_PROFILE: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DB:-viet_contract}
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag_secure_pwd}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-contract_audit_2024}
+      QDRANT_URL: http://qdrant:6333
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secure_pwd}
+      TIKA_SERVER_URL: ${TIKA_SERVER_URL:-http://tika:9998}
+    volumes:
+      - .:/app
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      tika:
+        condition: service_healthy
+    networks:
+      - rag_backend
+
+  kg-update-worker:
+    build: .
+    container_name: viet-contract-kg-update-worker
+    restart: unless-stopped
+    profiles:
+      - pipeline
+    command: ["uv", "run", "python", "src/kg_update_scheduler.py", "--interval-minutes", "15"]
+    environment:
+      STORAGE_PROFILE: production
+      KG_UPDATE_APPLY: ${KG_UPDATE_APPLY:-false}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DATABASE: ${POSTGRES_DB:-viet_contract}
+      POSTGRES_USER: ${POSTGRES_USER:-rag}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rag_secure_pwd}
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-contract_audit_2024}
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      LIGHTRAG_RERANK_ENABLED: ${LIGHTRAG_RERANK_ENABLED:-true}
+      LIGHTRAG_RERANK_MODEL: ${LIGHTRAG_RERANK_MODEL:-cross-encoder/mmarco-mMiniLMv2-L12-H384-v1}
+      LIGHTRAG_RERANK_BATCH_SIZE: ${LIGHTRAG_RERANK_BATCH_SIZE:-16}
+      LIGHTRAG_RERANK_MAX_CHARS: ${LIGHTRAG_RERANK_MAX_CHARS:-4000}
+      LIGHTRAG_RERANK_NORMALIZE_SCORES: ${LIGHTRAG_RERANK_NORMALIZE_SCORES:-true}
+      LIGHTRAG_MIN_RERANK_SCORE: ${LIGHTRAG_MIN_RERANK_SCORE:-0.0}
+      LIGHTRAG_QUERY_TOP_K: ${LIGHTRAG_QUERY_TOP_K:-10}
+      LIGHTRAG_CHUNK_TOP_K: ${LIGHTRAG_CHUNK_TOP_K:-20}
+      LIGHTRAG_CONTEXT_MAX_CHARS: ${LIGHTRAG_CONTEXT_MAX_CHARS:-1000}
+      LIGHTRAG_BENCHMARK_TRACE_ENABLED: ${LIGHTRAG_BENCHMARK_TRACE_ENABLED:-false}
+      LIGHTRAG_BENCHMARK_TRACE_PATH: ${LIGHTRAG_BENCHMARK_TRACE_PATH:-reports/benchmarks/retrieval_trace.jsonl}
+      LIGHTRAG_TRACE_PREVIEW_CHARS: ${LIGHTRAG_TRACE_PREVIEW_CHARS:-180}
+    volumes:
+      - .:/app
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    networks:
+      - rag_backend
+
 volumes:
   neo4j_data:
   neo4j_logs:
   qdrant_storage:
   postgres_data:
+  minio_data:
 
 networks:
   rag_backend:

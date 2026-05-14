@@ -1,22 +1,24 @@
 {
-  "timestamp": "2026-04-16T21:55:59.113266",
+  "timestamp": "2026-05-14T11:27:13.995637",
   "postgresql": {
     "host": "127.0.0.1",
-    "port": 55432,
+    "port": 5433,
     "database": "viet_contract",
     "workspace": "viet_contract_prod",
-    "table_count": 8,
+    "table_count": 10,
     "tables": {
+      "iceberg_namespace_properties": 1,
+      "iceberg_tables": 3,
       "lightrag_doc_chunks": 258,
       "lightrag_doc_full": 256,
       "lightrag_doc_status": 256,
       "lightrag_entity_chunks": 2138,
       "lightrag_full_entities": 222,
       "lightrag_full_relations": 222,
-      "lightrag_llm_cache": 0,
+      "lightrag_llm_cache": 63,
       "lightrag_relation_chunks": 2686
     },
-    "total_records": 6038,
+    "total_records": 6105,
     "status": "healthy"
   },
   "neo4j": {
@@ -30,14 +32,14 @@
     "url": "http://localhost:6333",
     "workspace": "viet_contract_prod",
     "collections": {
-      "lightrag_vdb_entities_paraphrase_multilingual_minilm_l12_v2_384d": {
-        "points": 2138
-      },
       "lightrag_vdb_relationships_paraphrase_multilingual_minilm_l12_v2_384d": {
         "points": 2754
       },
       "lightrag_vdb_chunks_paraphrase_multilingual_minilm_l12_v2_384d": {
         "points": 258
+      },
+      "lightrag_vdb_entities_paraphrase_multilingual_minilm_l12_v2_384d": {
+        "points": 2138
       }
     },
     "total_collections": 3,

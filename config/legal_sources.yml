@@ -1,0 +1,192 @@
+version: 1
+policy:
+  canonical_mode: official_first
+  commercial_sources: discovery_only
+  default_schedule: daily_batch
+  provenance_required: true
+  source_attribution_required: true
+lakehouse:
+  catalog:
+    type: sql
+    uri: postgresql+psycopg2://rag:rag_secure_pwd@postgres:5432/viet_contract
+    warehouse: s3://legal-lakehouse/warehouse
+  object_store:
+    endpoint: http://minio:9000
+    bucket: legal-lakehouse
+    access_key_env: MINIO_ROOT_USER
+    secret_key_env: MINIO_ROOT_PASSWORD
+  layers:
+    bronze: raw response bodies, headers, checksums, and fetch metadata
+    silver: normalized legal documents with article structure and provenance
+    gold: chunks, relations, entity seeds, and KG update manifests
+sources:
+  - source_id: congbao
+    name: Cong bao dien tu Chinh phu
+    tier: 0
+    role: canonical_update_feed
+    base_url: https://congbao.chinhphu.vn
+    domain_whitelist:
+      - congbao.chinhphu.vn
+      - congbao.dev.cnnd.vn
+    crawl_methods:
+      - rss
+      - detail
+    rss_feeds:
+      - id: van_ban_moi_dang
+        url: https://congbao.chinhphu.vn/cac-van-ban-moi-ban-hanh.rss
+      - id: cong_bao_moi_dang
+        url: http://congbao.chinhphu.vn/cac-so-cong-bao-moi-dang.rss
+    rate_limit_per_minute: 30
+    robots_policy: obey
+    priority: 10
+    license_note: "Canonical official source; RSS pages require source attribution."
+
+  - source_id: vbpl
+    name: Co so du lieu quoc gia ve VBQPPL
+    tier: 0
+    role: canonical_fulltext
+    base_url: https://vbpl.vn
+    domain_whitelist:
+      - vbpl.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 20
+    robots_policy: obey
+    priority: 9
+    license_note: "Canonical official legal document database."
+
+  - source_id: vanban_chinhphu
+    name: He thong van ban Chinh phu
+    tier: 0
+    role: official_fulltext
+    base_url: https://vanban.chinhphu.vn
+    domain_whitelist:
+      - vanban.chinhphu.vn
+      - datafiles.chinhphu.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 20
+    robots_policy: obey
+    priority: 8
+    license_note: "Official source for Government and Prime Minister documents."
+
+  - source_id: vbpl_moj
+    name: Co so du lieu VBPL Bo Tu phap
+    tier: 1
+    role: official_metadata_enrichment
+    base_url: https://vbpl.moj.gov.vn
+    domain_whitelist:
+      - vbpl.moj.gov.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 15
+    robots_policy: obey
+    priority: 7
+    license_note: "Official metadata enrichment when canonical records are incomplete."
+
+  - source_id: phapdien_moj
+    name: Phap dien Bo Tu phap
+    tier: 1
+    role: official_taxonomy
+    base_url: https://phapdien.moj.gov.vn
+    domain_whitelist:
+      - phapdien.moj.gov.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 15
+    robots_policy: obey
+    priority: 6
+    license_note: "Official taxonomy for domain routing and graph topic nodes."
+
+  - source_id: thuvienso_quochoi
+    name: Thu vien so Quoc hoi
+    tier: 1
+    role: draft_watchlist
+    base_url: https://thuvienso.quochoi.vn
+    domain_whitelist:
+      - thuvienso.quochoi.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 10
+    robots_policy: obey
+    priority: 5
+    license_note: "Official legislative materials; keep drafts outside effective-law KG."
+
+  - source_id: duthaoonline_quochoi
+    name: Du thao online Quoc hoi
+    tier: 1
+    role: draft_watchlist
+    base_url: https://duthaoonline.quochoi.vn
+    domain_whitelist:
+      - duthaoonline.quochoi.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 10
+    robots_policy: obey
+    priority: 5
+    license_note: "Official draft tracking; do not mix with effective-law KG."
+
+  - source_id: toaan_case_law
+    name: Nguon thuc tien xet xu Toa an
+    tier: 1
+    role: judicial_practice_graph
+    base_url: https://anle.toaan.gov.vn
+    domain_whitelist:
+      - vbpq.toaan.gov.vn
+      - anle.toaan.gov.vn
+      - congbobanan.toaan.gov.vn
+    crawl_methods:
+      - search
+      - detail
+    rate_limit_per_minute: 10
+    robots_policy: obey
+    priority: 4
+    license_note: "Judicial practice graph only; review PII risk before indexing."
+
+  - source_id: thuvienphapluat_discovery
+    name: Thu vien Phap luat discovery signal
+    tier: 2
+    role: commercial_discovery_only
+    base_url: https://thuvienphapluat.vn
+    domain_whitelist:
+      - thuvienphapluat.vn
+    crawl_methods:
+      - search
+    rate_limit_per_minute: 5
+    robots_policy: obey
+    priority: 1
+    license_note: "Discovery/cross-check only; do not store full text in lakehouse or KG without license."
+
+  - source_id: luatvietnam_discovery
+    name: LuatVietnam discovery signal
+    tier: 2
+    role: commercial_discovery_only
+    base_url: https://luatvietnam.vn
+    domain_whitelist:
+      - luatvietnam.vn
+    crawl_methods:
+      - search
+    rate_limit_per_minute: 5
+    robots_policy: obey
+    priority: 1
+    license_note: "Discovery/cross-check only; do not store full text in lakehouse or KG without license."
+
+  - source_id: caselaw_discovery
+    name: Caselaw discovery signal
+    tier: 2
+    role: commercial_discovery_only
+    base_url: https://caselaw.vn
+    domain_whitelist:
+      - caselaw.vn
+    crawl_methods:
+      - search
+    rate_limit_per_minute: 5
+    robots_policy: obey
+    priority: 1
+    license_note: "Discovery/cross-check only; do not store full text in lakehouse or KG without license."

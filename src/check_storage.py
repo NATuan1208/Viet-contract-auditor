@@ -277,9 +277,9 @@ async def main() -> None:
 
     print("\n" + "=" * 70)
     if all_healthy:
-        print("✓ All storage layers are healthy!")
+        print("[OK] All storage layers are healthy!")
     else:
-        print("⚠ Some storage layers have issues. Review logs above.")
+        print("[WARN] Some storage layers have issues. Review logs above.")
     print("=" * 70 + "\n")
 
     # Export summary to JSON

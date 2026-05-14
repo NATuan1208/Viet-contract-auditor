@@ -12,204 +12,244 @@ short_description: Vietnamese contract audit with LightRAG + LangGraph
 
 # Viet-Contract Auditor
 
-Hệ thống kiểm toán hợp đồng tiếng Việt tự động, sử dụng **LightRAG** (graph-based RAG) và **LangGraph** (multi-agent pipeline 7 node) để phát hiện vi phạm pháp lý, trích dẫn căn cứ luật và đề xuất sửa đổi điều khoản. Đầu vào là file hợp đồng PDF/DOCX/TXT, đầu ra là báo cáo kiểm định Markdown đầy đủ.
+Viet-Contract Auditor là hệ thống kiểm toán hợp đồng tiếng Việt tự động. Dự án kết hợp **LangGraph** cho pipeline multi-agent, **LightRAG** cho truy xuất pháp lý dạng graph RAG, và storage production gồm **Neo4j + Qdrant + PostgreSQL + MinIO/PyIceberg** để kiểm tra điều khoản, trích dẫn căn cứ pháp lý và sinh báo cáo Markdown.
 
----
+Đầu vào chính là hợp đồng `.docx`, `.txt` hoặc nội dung văn bản; đầu ra là báo cáo kiểm định gồm phát hiện rủi ro, căn cứ pháp lý, mức độ nghiêm trọng và khuyến nghị sửa đổi.
 
-## Kiến trúc hệ thống
+## Kiến trúc
 
 ![Kiến trúc multi-agent pipeline](Arch-diagramjpg.jpg)
 
-Pipeline gồm 7 node chạy tuần tự trên `AuditState` (Python TypedDict):
+### Runtime audit
 
-| Node | Vai trò | LLM |
+Pipeline audit chạy trên `AuditState` và được điều phối bởi `src/agents/orchestrator.py`:
+
+| Node | Vai trò | Ghi chú |
 |---|---|---|
-| **Router** | Phân loại domain hợp đồng, tách điều khoản | GPT-4o-mini (fallback keyword) |
-| **Preprocessor** | Tokenize, chuẩn hoá alias pháp lý, phát hiện cross-reference | underthesea (không LLM) |
-| **Retrieval** | Truy vấn hybrid Neo4j + Qdrant + PostgreSQL qua LightRAG | Không LLM |
-| **Context Validator** | Kiểm tra chất lượng context theo coverage/relevance/xref | Heuristic (không LLM) |
-| **Audit** | Phát hiện vi phạm điều khoản, sinh JSON findings | GPT-4o-mini |
-| **Critic** | Scan negation regex + xác minh LLM, anti-hallucination, chặn nitpicking | GPT-4o-mini (on-demand) |
-| **Generator** | Tổng hợp báo cáo Markdown cuối + fallback template | GPT-4o-mini |
+| Router | Phân loại domain hợp đồng và tách điều khoản | LLM + fallback keyword |
+| Preprocessor | Chuẩn hóa alias pháp lý, token hóa, phát hiện cross-reference | `underthesea`, không cần LLM |
+| Retrieval | Truy vấn LightRAG hybrid qua Neo4j, Qdrant, PostgreSQL | Có rerank tùy cấu hình |
+| Context Validator | Chấm coverage, relevance, cross-reference của context | Heuristic |
+| Audit | Phát hiện vi phạm và sinh findings có cấu trúc | LLM |
+| Critic | Kiểm tra hallucination, phủ định, nitpicking | LLM khi cần |
+| Generator | Tổng hợp báo cáo Markdown cuối | LLM + fallback template |
 
-Routing logic bao gồm retry loop (context validator → retrieval, tối đa 2 lần) và critic loop (critic → retrieval, tối đa 2 lần).
+Production runtime không đọc trực tiếp JSON trong `lightrag_index/`; đường serving đúng là qua storage layer và `src/core/lightrag_client.py`.
 
----
+### Data platform
 
-## Trạng thái các Phase
+Dự án đang mở rộng từ ETL một lần sang pipeline cập nhật tri thức pháp lý liên tục:
 
-| Phase | Mô tả | Trạng thái |
-|---|---|---|
-| 1–2 | ETL: ingest luật → semantic chunks (regex Điều-level) | ✅ Done |
-| 3 | LightRAG indexing + migrate → Neo4j + Qdrant + PostgreSQL | ✅ Done |
-| 4 | LangGraph 7-node pipeline: Router → Generator | ✅ Done |
-| 4B | Preprocessor + Context Validator + Critic, self-correction loop | ✅ Done |
-| 5 | Streamlit UI — dual-mode (production + HF Spaces demo) | ✅ Done |
-| 6 | Evaluator LLM-as-judge (precision/recall/F1 per domain) | ⬜ Pending |
-
-**Kết quả eval Phase 4B (fine-tuned):**
-
-| Hợp đồng | Domain | F1 |
-|---|---|---|
-| HDLD_01 | Lao động | 0.750 |
-| HDNQTM_01 | Thương mại | 0.857 |
-| HDBDS_01 (blind) | Dân sự | 0.800 |
-
----
+- `config/legal_sources.yml` là source registry.
+- Crawler lấy dữ liệu từ nguồn chính thức trước, ghi provenance cho từng record.
+- Local lakehouse debug nằm dưới `data/lakehouse/`.
+- Production-local lakehouse dùng PyIceberg với PostgreSQL catalog và MinIO warehouse.
+- KG update dùng manifest idempotent để insert/replace tài liệu vào LightRAG.
+- Rerank benchmark ghi trace tùy chọn để hiệu chỉnh retrieval.
 
 ## Cấu trúc repo
 
-```
+```text
 src/
-  run_audit.py              # Entry point CLI — xem mục "Chạy audit"
-  main.py                   # ETL orchestrator (Phase 1–2)
-  init_storage.py           # Migrate LightRAG artifacts → Neo4j/Qdrant/PostgreSQL
-  agents/
-    router_agent.py
-    preprocessor_agent.py
-    retrieval_agent.py
-    context_validator_agent.py
-    audit_agent.py
-    critic_agent.py
-    generator_agent.py
-    orchestrator.py         # StateGraph wiring (LangGraph)
-  core/
-    state.py                # AuditState TypedDict
-    llm_config.py           # LLM provider: OpenAI > Cerebras
-    storage_profile.py      # Dual-mode: production vs demo
-    vn_preprocessor.py      # underthesea + LEGAL_ALIAS_MAP
-    lightrag_client.py      # LightRAG hybrid query client
-  ui/
-    streamlit_app.py        # Main UI (185 lines)
-    theme.py                # CUSTOM_CSS
-    components/             # sidebar, upload, progress, metrics, findings, tabs
+  agents/                    LangGraph audit agents
+  core/                      LLM config, LightRAG client, rerank, tracing, shared state
+  pipeline/                  Source registry, connectors, lakehouse, versioning, KG update
+  ui/                        Streamlit app và components
+  run_audit.py               CLI kiểm toán hợp đồng
+  init_storage.py            Import artifacts từ lightrag_index/ vào storage production
+  check_storage.py           Smoke check Neo4j/Qdrant/PostgreSQL
+  crawl_legal_sources.py     Crawler nguồn pháp luật
+  lakehouse_validate.py      Validate source registry và lakehouse local/Iceberg
+  iceberg_validate.py        Validate PyIceberg SQL catalog + MinIO warehouse
+  kg_incremental_update.py   Validate/apply KG update manifests
+  kg_update_scheduler.py     Scheduler cho KG update
+  pipeline_health.py         Health check pipeline tổng hợp
+  e2e_eval.py                Đánh giá end-to-end theo ground truth
+  benchmark_*.py             Rerank benchmark, diagnose, calibration
 
-lightrag_index/             # Pre-built LightRAG artifacts (graphml + vdb JSON)
-result-example/             # Sample contracts + groundtruth JSON
-reports/final_outputs/      # Generated audit reports
-docker-compose.yml          # Neo4j 5.26 + Qdrant v1.13.2 + PostgreSQL 17 (pgvector)
-Dockerfile                  # HF Spaces single-container deployment
-.env.example                # Template biến môi trường
+config/
+  legal_sources.yml          Registry nguồn luật và chính sách dữ liệu
+
+tests/
+  test_legal_pipeline.py     Unit tests cho crawler, lakehouse, KG update, rerank benchmark
+
+lightrag_index/              Artifacts LightRAG prebuilt cho bootstrap/demo
+result-example/              Hợp đồng mẫu và ground truth
+reports/                     Báo cáo, metrics, benchmark outputs
+docker-compose.yml           Neo4j, Qdrant, PostgreSQL, MinIO, Tika, pipeline workers
+Dockerfile                   Container chạy app/demo
 ```
-
----
 
 ## Yêu cầu
 
 - Python 3.11
-- [uv](https://docs.astral.sh/uv/) (package manager — không dùng pip)
-- Docker (cho production storage stack)
-- `OPENAI_API_KEY` (GPT-4o-mini) hoặc `CEREBRAS_API_KEY` (fallback)
+- `uv`
+- Docker cho production storage stack
+- `OPENAI_API_KEY` hoặc `CEREBRAS_API_KEY`
 
----
-
-## Thiết lập biến môi trường
-
-Tạo file `.env` tại root project (tham khảo `.env.example`):
+Tạo `.env` từ `.env.example` và không commit khóa thật:
 
 ```bash
-OPENAI_API_KEY=sk-...          # Bắt buộc (hoặc dùng CEREBRAS_API_KEY)
-STORAGE_PROFILE=production     # production | demo
+OPENAI_API_KEY=sk-...
+STORAGE_PROFILE=production
+POSTGRES_PORT=5433
 ```
 
----
+## Chạy nhanh
 
-## Cách chạy
-
-### 1. Cài đặt dependencies
+### 1. Cài dependencies
 
 ```bash
 uv sync
 ```
 
-### 2. Khởi động storage (production profile)
+### 2. Khởi động storage production
 
 ```bash
 docker compose up -d
-# Chờ services healthy (~30s), kiểm tra:
 docker compose ps
 ```
 
-### 3. Migrate LightRAG artifacts vào storage
+Stack mặc định gồm:
 
-Chỉ cần chạy 1 lần sau khi `docker compose up -d`:
+| Service | Port host | Vai trò |
+|---|---:|---|
+| Neo4j | 7474, 7687 | Knowledge graph |
+| Qdrant | 6333 | Vector store |
+| PostgreSQL/pgvector | 5433 | KV, doc status, SQL catalog |
+| MinIO | 9000, 9001 | Iceberg object warehouse |
+
+### 3. Import index mẫu vào storage
 
 ```bash
 uv run python src/init_storage.py
+uv run python src/check_storage.py
 ```
 
-### 4. Kiểm định 1 hợp đồng (CLI)
+### 4. Chạy kiểm toán hợp đồng bằng CLI
 
 ```bash
-uv run python src/run_audit.py result-example/HDLD/HDLD_ThucHanh_01.docx \
-  --output reports/final_outputs/hdld_report.md
+uv run python src/run_audit.py result-example/HDLD/HDLD_ThucHanh_01.docx --output reports/final_outputs/hdld_report.md
 ```
-
-Đầu ra: file Markdown với các vi phạm, căn cứ pháp lý và khuyến nghị sửa đổi.
 
 ### 5. Chạy Streamlit UI
 
-**Production profile** (cần Docker stack đang chạy):
-
 ```bash
 uv run streamlit run src/ui/streamlit_app.py
-# Truy cập: http://localhost:8501
 ```
 
-**Demo profile** (không cần Docker — dùng LightRAG JSON artifacts):
+Mở `http://localhost:8501`.
+
+Demo profile cho môi trường đơn container:
 
 ```bash
 STORAGE_PROFILE=demo uv run streamlit run src/ui/streamlit_app.py
 ```
 
-### 6. Chạy evaluation (Phase 4B)
+## Pipeline dữ liệu pháp luật
+
+### Validate registry và lakehouse
 
 ```bash
-uv run python src/e2e_eval.py \
-  --groundtruth "result-example/HDLD/groundtruth_hdld_01_test copy.json"
+uv run python src/lakehouse_validate.py
+uv run python src/pipeline_health.py
 ```
 
----
-
-## Triển khai lên Hugging Face Spaces
+### Validate Iceberg production-local
 
 ```bash
-# Build và test local trước:
+uv run python src/iceberg_validate.py --init-tables --counts
+```
+
+### Crawl thử không ghi dữ liệu
+
+```bash
+uv run python src/crawl_legal_sources.py --since 2026-05-01 --dry-run
+```
+
+### Ghi lakehouse local và Iceberg
+
+```bash
+uv run python src/crawl_legal_sources.py --source-id congbao --since 2026-05-01 --write-lakehouse --iceberg
+```
+
+### Validate và apply KG manifests
+
+```bash
+uv run python src/kg_incremental_update.py --dry-run
+KG_UPDATE_APPLY=true uv run python src/kg_update_scheduler.py --once
+```
+
+Profile `pipeline` chạy scheduler tự động:
+
+```bash
+docker compose --profile pipeline up -d
+```
+
+Profile này bật thêm Apache Tika, crawler worker và KG update worker.
+
+## Evaluation và benchmark
+
+Chạy end-to-end evaluation:
+
+```bash
+uv run python src/e2e_eval.py --groundtruth "result-example/HDLD/groundtruth_hdld_01_test copy.json"
+```
+
+Chạy unit tests hiện có:
+
+```bash
+uv run python -m unittest tests/test_legal_pipeline.py
+```
+
+Chạy rerank benchmark A/B:
+
+```bash
+uv run python src/benchmark_rerank_ab.py --groundtruth "result-example/HDLD/groundtruth_hdld_01_test copy.json"
+```
+
+Các biến chính cho retrieval/rerank:
+
+```bash
+LIGHTRAG_RERANK_ENABLED=true
+LIGHTRAG_RERANK_MODEL=cross-encoder/mmarco-mMiniLMv2-L12-H384-v1
+LIGHTRAG_QUERY_TOP_K=10
+LIGHTRAG_CHUNK_TOP_K=20
+LIGHTRAG_CONTEXT_MAX_CHARS=1000
+LIGHTRAG_BENCHMARK_TRACE_ENABLED=false
+```
+
+## Hugging Face Spaces
+
+Repo vẫn giữ metadata và `Dockerfile` để chạy HF Spaces bằng SDK Docker.
+
+```bash
 docker build -t viet-auditor-demo .
 docker run -p 7860:7860 -e OPENAI_API_KEY=$OPENAI_API_KEY viet-auditor-demo
-# Truy cập: http://localhost:7860
-
-# Push lên HF Spaces:
-# 1. Tạo Space mới với SDK=Docker trên huggingface.co
-# 2. git push remote hf main
-# 3. Thêm OPENAI_API_KEY vào Space secrets
 ```
 
-> **Lưu ý:** `lightrag_index/` phải được commit vào repo HF Spaces để demo profile hoạt động.
-> Tổng dung lượng index ~50MB — nằm trong giới hạn HF Spaces free tier.
+Khi dùng demo profile, cần có artifacts trong `lightrag_index/`.
 
----
+## Quy tắc dữ liệu
 
-## Corpus luật (dữ liệu index)
+- Ưu tiên nguồn chính thức Tier 0/Tier 1 cho dữ liệu canonical.
+- Nguồn Tier 2 thương mại chỉ dùng discovery/cross-check, không lưu full text vào lakehouse hoặc KG nếu chưa có license/API cho phép.
+- Mọi record crawled phải có `source_id`, canonical URL, `fetched_at`, checksum, license note và `doc_id` chuẩn hóa.
+- Retrieval corpus và evaluation corpus phải tách biệt.
+- KG update phải idempotent: checksum không đổi thì không tạo update; checksum đổi thì tạo version mới và replace manifest.
+- Không commit raw crawl output, lakehouse data, crawler state hoặc legal artifacts tải về dung lượng lớn.
 
-| Nguồn | Luật | Chunks |
-|---|---|---|
-| HuggingFace `NghiemAbe/Legal-Corpus-Zalo` | BLDS 2015 (91/2015/QH13) | 118 |
-| HuggingFace `NghiemAbe/Legal-Corpus-Zalo` | Luật DN 2020 (59/2020/QH14) | 115 |
-| HuggingFace `NghiemAbe/Legal-Corpus-Zalo` | Luật TTTM 2010 (54/2010/QH12) | 23 |
-| Local `.txt` | Luật Thương mại 2005 | — |
-| Local `.txt` | Bộ luật Lao động 2019 | — |
+## Trạng thái hiện tại
 
-**Tổng:** 256 chunks, ~240K tokens. Được index vào Neo4j (knowledge graph) + Qdrant (vector) + PostgreSQL (KV store).
+| Mảng | Trạng thái |
+|---|---|
+| Audit multi-agent với LangGraph | Hoạt động |
+| LightRAG production storage | Hoạt động qua Neo4j/Qdrant/PostgreSQL |
+| Streamlit UI production/demo | Hoạt động |
+| E2E evaluation | Có CLI và ground truth mẫu |
+| Legal-source crawler | Đã có registry, connectors, dry-run/write-lakehouse |
+| Local + Iceberg lakehouse | Có validation và writer |
+| Incremental KG update | Có manifest, dry-run, apply scheduler |
+| Rerank benchmark | Có A/B, diagnosis, calibration |
 
----
-
-## Quy tắc dữ liệu quan trọng
-
-- **Data segregation:** Corpus luật chỉ dùng để index KG. Bộ groundtruth/eval phải tách biệt hoàn toàn.
-- **Chunking:** Regex-based theo `Điều \d+\.` — không dùng character-split.
-- **Agent runtime:** Phải đọc từ production storage (Neo4j/Qdrant/PostgreSQL) — không đọc trực tiếp JSON trong `lightrag_index/`.
-
----
-
-*CS431 · University of Information Technology (UIT) · HK2 2025–2026*
+*CS431 - University of Information Technology (UIT) - HK2 2025-2026*
